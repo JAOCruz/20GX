@@ -1,0 +1,26 @@
+{
+  "name": "slippi-highlight-pipeline",
+  "version": "1.0.0",
+  "description": "Detecta highlights en replays de Slippi, los corta en clips y los sube a Discord para revision antes de publicar en YouTube.",
+  "main": "process-replay.js",
+  "scripts": {
+    "process": "node process-replay.js",
+    "dashboard-mac": "node dashboard-mac-server.js",
+    "dashboard": "node dashboard-server.js",
+    "worker": "node worker-server.js"
+  },
+  "dependencies": {
+    "@discordjs/opus": "^0.10.0",
+    "@discordjs/voice": "^0.19.2",
+    "@slippi/slippi-js": "^6.7.0",
+    "cors": "^2.8.6",
+    "discord.js": "^14.26.5",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "opusscript": "^0.0.8",
+    "prism-media": "^1.3.5"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

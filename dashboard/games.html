@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Slippi Clips · Super Smash Bros. Melee</title>
+  <style>
+    :root {
+      --bg:#0a1628;
+      --panel:#132238;
+      --panel-hover:#1a2e4a;
+      --text:#f8f9fa;
+      --muted:#94a3b8;
+      --accent:#e60012;
+      --accent-hover:#ff1a2e;
+      --gold:#ffd700;
+      --blue:#0066cc;
+      --ok:#22c55e;
+      --warn:#f59e0b;
+      --danger:#ef4444;
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:var(--bg); color:var(--text); padding:2rem; }
+    header { display:flex; align-items:center; gap:1rem; margin-bottom:1.5rem; flex-wrap:wrap; }
+    .logo { width:48px; height:48px; background:linear-gradient(135deg, var(--accent) 0%, var(--gold) 100%); border-radius:12px; display:grid; place-items:center; font-weight:900; color:#fff; font-size:1.4rem; text-shadow:0 2px 4px rgba(0,0,0,.4); box-shadow:0 4px 12px rgba(230,0,18,.3); }
+    .brand h1 { margin:0; font-size:1.75rem; letter-spacing:-0.5px; }
+    .brand span { color:var(--gold); font-weight:700; }
+    .brand p { margin:.2rem 0 0; color:var(--muted); font-size:.9rem; }
+    .options { background:var(--panel); border-radius:1rem; padding:1rem; margin-bottom:1.25rem; border:1px solid #1e3a5f; }
+    .options label { display:inline-flex; align-items:center; gap:.5rem; margin-right:1.25rem; font-size:.9rem; color:var(--muted); }
+    .options input[type=number] { width:60px; background:#0b1220; border:1px solid #334155; color:var(--text); border-radius:.25rem; padding:.25rem; }
+    .toolbar { display:flex; gap:.75rem; flex-wrap:wrap; align-items:center; margin-bottom:1.25rem; }
+    .btn { background:var(--accent); color:#fff; border:none; border-radius:.5rem; padding:.55rem 1.1rem; font-weight:700; cursor:pointer; box-shadow:0 2px 8px rgba(230,0,18,.25); }
+    .btn:hover { background:var(--accent-hover); }
+    .btn:disabled { opacity:.5; cursor:not-allowed; }
+    .btn-secondary { background:#1e3a5f; box-shadow:none; }
+    .btn-secondary:hover { background:#274d7a; }
+    .btn-gold { background:var(--gold); color:#0a1628; box-shadow:0 2px 8px rgba(255,215,0,.2); }
+    .btn-gold:hover { background:#ffe135; }
+    .search { background:#0b1220; border:1px solid #1e3a5f; color:var(--text); border-radius:.5rem; padding:.55rem .75rem; min-width:240px; }
+    .status { color:var(--muted); font-size:.9rem; }
+    .tabs { display:flex; gap:.5rem; margin-bottom:1.25rem; }
+    .tab { background:var(--panel); color:var(--muted); border:1px solid #1e3a5f; border-radius:.5rem; padding:.5rem 1rem; cursor:pointer; }
+    .tab.active { background:var(--blue); color:#fff; border-color:var(--blue); }
+    .game { background:var(--panel); border-radius:1rem; padding:1rem 1.25rem; margin-bottom:.75rem; border:1px solid #1e3a5f; transition:background .15s; }
+    .game:hover { background:var(--panel-hover); }
+    .game-row { display:flex; gap:1rem; align-items:flex-start; }
+    .game input[type=checkbox] { margin-top:.35rem; transform:scale(1.2); accent-color:var(--accent); }
+    .game-body { flex:1; }
+    .game h3 { margin:0 0 .35rem; font-size:1rem; }
+    .game h3 .vs { color:var(--gold); font-weight:800; }
+    .meta { color:var(--muted); font-size:.85rem; margin-bottom:.5rem; }
+    .meta span { margin-right:1rem; }
+    .clips { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:.5rem; }
+    .clip { background:#0b1220; border:1px solid #1e3a5f; border-radius:.5rem; padding:.35rem .6rem; font-size:.8rem; color:var(--text); text-decoration:none; }
+    .clip:hover { border-color:var(--accent); }
+    .clip.combined { background:#14532d; color:#86efac; border-color:#14532d; }
+    .processed-badge { background:var(--ok); color:#052e16; font-size:.75rem; padding:.15rem .5rem; border-radius:.25rem; margin-left:.5rem; }
+    .empty { color:var(--muted); font-style:italic; padding:2rem 0; }
+    .job-panel { background:var(--panel); border-radius:1rem; padding:1rem; margin-bottom:1.25rem; border:1px solid #1e3a5f; }
+    .job-panel h3 { margin:0 0 .5rem; }
+    .job-log { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:.8rem; color:var(--muted); white-space:pre-wrap; max-height:200px; overflow:auto; background:#0b1220; padding:.75rem; border-radius:.5rem; }
+    .progress-bar { height:8px; background:#1e3a5f; border-radius:4px; margin-top:.5rem; overflow:hidden; }
+    .progress-fill { height:100%; background:linear-gradient(90deg, var(--accent), var(--gold)); width:0%; transition:width .3s; }
+    .progress-fill.indeterminate { width:100% !important; background:linear-gradient(90deg, transparent, var(--gold), transparent); animation: indeterminate 1.2s infinite linear; }
+    @keyframes indeterminate { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+    .stock-panel { margin-top:.75rem; padding:.75rem; background:#0b1220; border-radius:.5rem; border:1px solid #1e3a5f; }
+    .stock-panel h4 { margin:0 0 .5rem; font-size:.9rem; color:var(--gold); }
+    .stock-list { display:flex; flex-wrap:wrap; gap:.5rem; }
+    .stock-item { display:flex; align-items:center; gap:.35rem; background:var(--panel); border:1px solid #1e3a5f; border-radius:.4rem; padding:.35rem .6rem; font-size:.85rem; cursor:pointer; }
+    .stock-item input { accent-color:var(--accent); }
+    .stock-actions { margin-top:.75rem; display:flex; gap:.5rem; }
+    .small { font-size:.75rem; color:var(--muted); }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">S</div>
+    <div class="brand">
+      <h1>Slippi Clips <span>· Melee</span></h1>
+      <p>Selecciona replays y stocks para generar highlights automáticamente</p>
+    </div>
+  </header>
+
+  <div class="options">
+    <label><input type="checkbox" id="optTelegram" checked> Enviar por Telegram</label>
+    <label><input type="checkbox" id="optCopyMac" checked> Copiar a Mac</label>
+    <label><input type="checkbox" id="optMixDiscord"> Mezclar audio de Discord</label>
+    <label>Segundos antes del kill: <input type="number" id="optLead" value="7" min="0" max="60"></label>
+    <label>Segundos después del kill: <input type="number" id="optPad" value="2" min="0" max="60"></label>
+  </div>
+
+  <div class="options" style="margin-top:.5rem;">
+    <span class="small">Discord: </span>
+    <input class="search" id="discordGuild" type="text" placeholder="Guild ID" style="min-width:120px; margin-right:.5rem;">
+    <input class="search" id="discordChannel" type="text" placeholder="Channel ID" style="min-width:120px; margin-right:.5rem;">
+    <button class="btn btn-secondary" onclick="startDiscordRecording()">🔴 Grabar voz del canal</button>
+    <button class="btn btn-secondary" onclick="stopDiscordRecording()">⏹ Detener voz</button>
+    <button class="btn" onclick="startAutoSession()">🎙️ Iniciar sesión de juego</button>
+    <button class="btn btn-secondary" onclick="stopAutoSession()">⏹ Detener sesión</button>
+    <span class="status" id="discordStatus"></span>
+  </div>
+
+  <div class="options" id="sessionPanel" style="margin-top:.5rem; display:none;">
+    <div class="small" id="sessionStatus">Sesión inactiva</div>
+    <div class="small" id="sessionFiles"></div>
+    <div class="job-log" id="sessionLog" style="max-height:120px; margin-top:.5rem;"></div>
+  </div>
+
+  <div class="toolbar">
+    <button class="btn" id="btnRefresh" onclick="refreshGames(false)">🔄 Escanear rápido</button>
+    <button class="btn btn-secondary" id="btnRefreshFull" onclick="refreshGames(true)">🔄 Esc. completo (lento)</button>
+    <button class="btn" id="btnRender" onclick="renderSelected()" disabled>🎬 Renderizar seleccionados</button>
+    <button class="btn btn-secondary" onclick="selectAll()">Seleccionar todos</button>
+    <button class="btn btn-secondary" onclick="selectNone()">Ninguno</button>
+    <input class="search" id="search" type="text" placeholder="Buscar jugador, personaje o stage..." oninput="renderList()">
+    <span class="status" id="status">Cargando...</span>
+  </div>
+
+  <div id="jobPanel" class="job-panel" style="display:none;">
+    <h3 id="jobTitle">Procesando...</h3>
+    <div class="progress-bar"><div class="progress-fill" id="jobProgress"></div></div>
+    <div class="job-log" id="jobLog"></div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="setTab('all')" id="tabAll">Todos los replays</button>
+    <button class="tab" onclick="setTab('processed')" id="tabProcessed">Ya procesados</button>
+  </div>
+
+  <div id="games"></div>
+
+  <script>
+    let allGames = [];
+    let processedGames = [];
+    let currentTab = 'all';
+    let selectedGames = new Set();
+    let selectedStocks = {}; // { filePath: [stockIndices] }
+    let expandedGame = null;
+    let scanning = false;
+    let currentJobId = null;
+
+    function formatTime(s) {
+      const m = Math.floor(s / 60);
+      const sec = Math.floor(s % 60);
+      return `${m}:${sec.toString().padStart(2, '0')}`;
+    }
+
+    function formatDate(d) {
+      return d ? d.replace(' ', ' · ') : '';
+    }
+
+    function setTab(tab) {
+      currentTab = tab;
+      document.getElementById('tabAll').className = tab === 'all' ? 'tab active' : 'tab';
+      document.getElementById('tabProcessed').className = tab === 'processed' ? 'tab active' : 'tab';
+      renderList();
+    }
+
+    function formatCacheAge(isoDate) {
+      if (!isoDate) return '';
+      const diff = Math.floor((Date.now() - new Date(isoDate).getTime()) / 1000);
+      if (diff < 60) return 'hace unos segundos';
+      if (diff < 3600) return `hace ${Math.floor(diff / 60)}m`;
+      if (diff < 86400) return `hace ${Math.floor(diff / 3600)}h`;
+      return `hace ${Math.floor(diff / 86400)}d`;
+    }
+
+    function updateStatus(data) {
+      const age = data.generatedAt ? ` · ${formatCacheAge(data.generatedAt)}` : '';
+      const durationInfo = data.options?.includeDuration ? ' · con duración' : '';
+      document.getElementById('status').textContent = `${data.count || 0} replays${data.cached ? ' (cache' + age + durationInfo + ')' : ''}`;
+    }
+
+    async function loadGames() {
+      await loadConfig();
+      try {
+        const res = await fetch('/api/games');
+        const data = await res.json();
+        allGames = data.games || [];
+        updateStatus(data);
+      } catch (e) {
+        document.getElementById('status').textContent = 'Error cargando: ' + e.message;
+      }
+      await loadProcessed();
+      renderList();
+    }
+
+    async function loadConfig() {
+      try {
+        const res = await fetch('/api/config');
+        const cfg = await res.json();
+        if (cfg.discordGuildId) document.getElementById('discordGuild').value = cfg.discordGuildId;
+        if (cfg.discordChannelId) document.getElementById('discordChannel').value = cfg.discordChannelId;
+      } catch (e) {
+        // ignorar
+      }
+    }
+
+    async function loadProcessed() {
+      try {
+        const res = await fetch('/api/dashboard');
+        const data = await res.json();
+        processedGames = data.games || [];
+      } catch (e) {
+        processedGames = [];
+      }
+    }
+
+    async function refreshGames(full = false) {
+      if (scanning) return;
+      scanning = true;
+      const btnFast = document.getElementById('btnRefresh');
+      const btnFull = document.getElementById('btnRefreshFull');
+      btnFast.disabled = true;
+      btnFull.disabled = true;
+      const mode = full ? 'completo' : 'rápido';
+      document.getElementById('status').textContent = `Escaneo ${mode} en progreso...`;
+
+      try {
+        await fetch(full ? '/api/refresh?duration=1' : '/api/refresh', { method: 'POST' });
+        const maxWait = full ? 600 : 180;
+        for (let i = 0; i < maxWait; i++) {
+          await new Promise((r) => setTimeout(r, 2000));
+          const res = await fetch('/api/games');
+          const data = await res.json();
+          if (data.cached) {
+            allGames = data.games || [];
+            updateStatus(data);
+            renderList();
+            break;
+          }
+        }
+      } catch (e) {
+        document.getElementById('status').textContent = 'Error escaneando: ' + e.message;
+      } finally {
+        scanning = false;
+        btnFast.disabled = false;
+        btnFull.disabled = false;
+      }
+    }
+
+    function isProcessed(game) {
+      return processedGames.some((p) => p.gamePath === game.filePath);
+    }
+
+    function renderList() {
+      const container = document.getElementById('games');
+      const q = document.getElementById('search').value.toLowerCase();
+
+      let list = currentTab === 'all' ? allGames : processedGames;
+      if (q) {
+        list = list.filter((g) => {
+          const text = [g.fileName, ...g.players.map((p) => `${p.connectCode} ${p.characterName} ${p.nametag}`), g.stageName, g.folder].join(' ').toLowerCase();
+          return text.includes(q);
+        });
+      }
+
+      if (list.length === 0) {
+        container.innerHTML = '<p class="empty">No hay juegos para mostrar.</p>';
+        updateRenderButton();
+        return;
+      }
+
+      container.innerHTML = '';
+      for (const g of list) {
+        const proc = currentTab === 'all' && isProcessed(g);
+        const div = document.createElement('div');
+        div.className = 'game';
+
+        const row = document.createElement('div');
+        row.className = 'game-row';
+
+        if (currentTab === 'all') {
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.checked = selectedGames.has(g.filePath);
+          cb.onchange = () => toggleSelectGame(g.filePath, cb.checked);
+          row.appendChild(cb);
+        }
+
+        const body = document.createElement('div');
+        body.className = 'game-body';
+
+        const p1 = g.players[0];
+        const p2 = g.players[1];
+        const title = document.createElement('h3');
+        title.innerHTML = `${p1.connectCode} (${p1.characterName}) <span class="vs">VS</span> ${p2.connectCode} (${p2.characterName}) ${proc ? '<span class="processed-badge">Procesado</span>' : ''}`;
+
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        meta.innerHTML = `<span>🏟️ ${g.stageName}</span><span>📁 ${g.folder}</span><span>📅 ${formatDate(g.date)}</span>${g.durationSeconds ? `<span>⏱️ ${formatTime(g.durationSeconds)}</span>` : ''}`;
+
+        body.appendChild(title);
+        body.appendChild(meta);
+
+        if (currentTab === 'processed') {
+          const clips = document.createElement('div');
+          clips.className = 'clips';
+          clips.innerHTML = g.clips.map((c, i) =>
+            `<a class="clip" href="/clips-auto/${g.label}/${c.file}" target="_blank">Stock ${i + 1} (${formatTime(c.stockTimeSeconds)})</a>`
+          ).join('') + `<a class="clip combined" href="/clips-auto/${g.label}/${g.combined}" target="_blank">Combinado</a>`;
+          body.appendChild(clips);
+        } else {
+          const stockBtn = document.createElement('button');
+          stockBtn.className = 'btn btn-secondary';
+          stockBtn.style.marginTop = '.5rem';
+          stockBtn.textContent = expandedGame === g.filePath ? '▲ Ocultar stocks' : '▼ Ver stocks';
+          stockBtn.onclick = () => toggleStocks(g);
+          body.appendChild(stockBtn);
+
+          if (expandedGame === g.filePath) {
+            const panel = document.createElement('div');
+            panel.className = 'stock-panel';
+            panel.id = `stock-panel-${CSS.escape(g.filePath)}`;
+            panel.innerHTML = '<p class="small">Cargando stocks...</p>';
+            body.appendChild(panel);
+            loadStocksIntoPanel(g, panel);
+          }
+        }
+
+        row.appendChild(body);
+        div.appendChild(row);
+        container.appendChild(div);
+      }
+      updateRenderButton();
+    }
+
+    function toggleSelectGame(filePath, checked) {
+      if (checked) selectedGames.add(filePath);
+      else {
+        selectedGames.delete(filePath);
+        delete selectedStocks[filePath];
+      }
+      updateRenderButton();
+    }
+
+    function toggleStocks(g) {
+      expandedGame = expandedGame === g.filePath ? null : g.filePath;
+      renderList();
+    }
+
+    async function loadStocksIntoPanel(g, panel) {
+      try {
+        const params = new URLSearchParams({
+          slp: g.filePath,
+          attacker: g.mainPlayer?.playerIndex,
+          victim: g.opponent?.playerIndex,
+        });
+        const res = await fetch(`/api/stocks?${params}`);
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+
+        panel.innerHTML = '<h4>💥 Stocks disponibles (selecciona los que quieras renderizar)</h4>';
+
+        const mainName = data.playerA?.name || 'HARD/JIMMY';
+        const oppName = data.playerB?.name || 'Oponente';
+        const mainChar = data.playerA?.charName || '';
+        const oppChar = data.playerB?.charName || '';
+
+        const wrapper = document.createElement('div');
+        wrapper.style.display = 'grid';
+        wrapper.style.gridTemplateColumns = '1fr 1fr';
+        wrapper.style.gap = '1rem';
+
+        const selected = selectedStocks[g.filePath] || { main: [], opponent: [] };
+
+        function renderColumn(title, stocks, direction) {
+          const col = document.createElement('div');
+          col.style.background = '#0b1220';
+          col.style.border = '1px solid #1e3a5f';
+          col.style.borderRadius = '.5rem';
+          col.style.padding = '.5rem';
+
+          const h = document.createElement('div');
+          h.style.color = 'var(--gold)';
+          h.style.fontSize = '.85rem';
+          h.style.marginBottom = '.4rem';
+          h.textContent = title;
+          col.appendChild(h);
+
+          const list = document.createElement('div');
+          list.className = 'stock-list';
+          if (stocks.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'small';
+            empty.textContent = 'Ninguno';
+            list.appendChild(empty);
+          } else {
+            stocks.forEach((s) => {
+              const item = document.createElement('label');
+              item.className = 'stock-item';
+              const cb = document.createElement('input');
+              cb.type = 'checkbox';
+              cb.checked = (selected[direction] || []).includes(s.index);
+              cb.onchange = () => toggleStock(g.filePath, direction, s.index, cb.checked);
+              item.appendChild(cb);
+              item.append(`Stock ${s.index + 1} · ${formatTime(s.timeSeconds)}`);
+              list.appendChild(item);
+            });
+          }
+          col.appendChild(list);
+          return col;
+        }
+
+        wrapper.appendChild(renderColumn(`${mainName}${mainChar ? ' (' + mainChar + ')' : ''} mata a ${oppName}`, data.stocksAtoB, 'main'));
+        wrapper.appendChild(renderColumn(`${oppName}${oppChar ? ' (' + oppChar + ')' : ''} mata a ${mainName}`, data.stocksBtoA, 'opponent'));
+        panel.appendChild(wrapper);
+
+        const actions = document.createElement('div');
+        actions.className = 'stock-actions';
+        actions.innerHTML = `<button class="btn" data-render-stock-btn onclick="renderGameStocks('${g.filePath.replace(/'/g, "\\'")}')">🎬 Renderizar stocks seleccionados</button>`;
+        panel.appendChild(actions);
+      } catch (e) {
+        panel.innerHTML = `<p class="small">Error cargando stocks: ${e.message}</p>`;
+      }
+    }
+
+    function toggleStock(filePath, direction, stockIndex, checked) {
+      if (!selectedStocks[filePath]) selectedStocks[filePath] = { main: [], opponent: [] };
+      const list = selectedStocks[filePath][direction] || [];
+      if (checked) {
+        if (!list.includes(stockIndex)) list.push(stockIndex);
+      } else {
+        selectedStocks[filePath][direction] = list.filter((i) => i !== stockIndex);
+      }
+      if (selectedStocks[filePath].main.length === 0 && selectedStocks[filePath].opponent.length === 0) {
+        delete selectedStocks[filePath];
+      }
+      updateRenderButton();
+    }
+
+    function selectAll() {
+      const q = document.getElementById('search').value.toLowerCase();
+      allGames.forEach((g) => {
+        if (!q) selectedGames.add(g.filePath);
+        else {
+          const text = [g.fileName, ...g.players.map((p) => `${p.connectCode} ${p.characterName}`), g.stageName].join(' ').toLowerCase();
+          if (text.includes(q)) selectedGames.add(g.filePath);
+        }
+      });
+      renderList();
+    }
+
+    function selectNone() {
+      selectedGames.clear();
+      selectedStocks = {};
+      renderList();
+    }
+
+    function countSelectedStocks() {
+      return Object.values(selectedStocks).reduce((sum, groups) => {
+        return sum + (groups.main?.length || 0) + (groups.opponent?.length || 0);
+      }, 0);
+    }
+
+    function flattenSelectedStocks(filePath) {
+      const groups = selectedStocks[filePath] || { main: [], opponent: [] };
+      const flat = [];
+      (groups.main || []).forEach((i) => flat.push({ index: i, direction: 'main' }));
+      (groups.opponent || []).forEach((i) => flat.push({ index: i, direction: 'opponent' }));
+      return flat;
+    }
+
+    function updateRenderButton() {
+      const totalStocks = countSelectedStocks();
+      const btn = document.getElementById('btnRender');
+      const count = selectedGames.size + totalStocks;
+      btn.disabled = count === 0;
+      btn.textContent = `🎬 Renderizar (${selectedGames.size} juegos, ${totalStocks} stocks)`;
+    }
+
+    function getOptions() {
+      return {
+        sendTelegram: document.getElementById('optTelegram').checked,
+        copyToMac: document.getElementById('optCopyMac').checked,
+        mixDiscord: document.getElementById('optMixDiscord').checked,
+        paddingBefore: document.getElementById('optLead').value,
+        paddingAfter: document.getElementById('optPad').value,
+      };
+    }
+
+    async function startDiscordRecording() {
+      const guildId = document.getElementById('discordGuild').value;
+      const channelId = document.getElementById('discordChannel').value;
+      if (!guildId || !channelId) {
+        document.getElementById('discordStatus').textContent = 'Faltan Guild ID y Channel ID';
+        return;
+      }
+      document.getElementById('discordStatus').textContent = 'Conectando...';
+      try {
+        const res = await fetch('/api/discord/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ guildId, channelId }),
+        });
+        const data = await res.json();
+        document.getElementById('discordStatus').textContent = data.error ? 'Error: ' + data.error : `Grabando ${data.userIds?.length || ''} voz(es)...`;
+      } catch (e) {
+        document.getElementById('discordStatus').textContent = 'Error: ' + e.message;
+      }
+    }
+
+    async function stopDiscordRecording() {
+      document.getElementById('discordStatus').textContent = 'Deteniendo...';
+      try {
+        const res = await fetch('/api/discord/stop', { method: 'POST' });
+        const data = await res.json();
+        document.getElementById('discordStatus').textContent = data.error ? 'Error: ' + data.error : 'Listo: ' + data.wavPath.split('/').pop();
+      } catch (e) {
+        document.getElementById('discordStatus').textContent = 'Error: ' + e.message;
+      }
+    }
+
+    let sessionPollTimer = null;
+
+    async function startAutoSession() {
+      const guildId = document.getElementById('discordGuild').value;
+      const channelId = document.getElementById('discordChannel').value;
+      if (!guildId || !channelId) {
+        document.getElementById('discordStatus').textContent = 'Faltan Guild ID y Channel ID';
+        return;
+      }
+      document.getElementById('discordStatus').textContent = 'Iniciando sesión...';
+      try {
+        const res = await fetch('/api/session/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ guildId, channelId, options: getOptions() }),
+        });
+        const data = await res.json();
+        if (data.error) {
+          document.getElementById('discordStatus').textContent = 'Error: ' + data.error;
+          return;
+        }
+        document.getElementById('discordStatus').textContent = `Sesión activa · grabando ${data.recording?.userIds?.length || ''} voz(es)`;
+        document.getElementById('sessionPanel').style.display = 'block';
+        startSessionPolling();
+      } catch (e) {
+        document.getElementById('discordStatus').textContent = 'Error: ' + e.message;
+      }
+    }
+
+    async function stopAutoSession() {
+      document.getElementById('discordStatus').textContent = 'Deteniendo sesión...';
+      try {
+        const res = await fetch('/api/session/stop', { method: 'POST' });
+        const data = await res.json();
+        if (data.error) {
+          document.getElementById('discordStatus').textContent = 'Error: ' + data.error;
+          return;
+        }
+        document.getElementById('discordStatus').textContent = `Sesión detenida · ${data.detectedFiles?.length || 0} replay(s) detectado(s)`;
+      } catch (e) {
+        document.getElementById('discordStatus').textContent = 'Error: ' + e.message;
+      }
+    }
+
+    function startSessionPolling() {
+      if (sessionPollTimer) clearInterval(sessionPollTimer);
+      sessionPollTimer = setInterval(async () => {
+        try {
+          const res = await fetch('/api/session');
+          const data = await res.json();
+          const session = data.session;
+          if (!session) {
+            document.getElementById('sessionPanel').style.display = 'none';
+            clearInterval(sessionPollTimer);
+            return;
+          }
+          const statusMap = { recording: '🔴 Grabando', stopping: '⏹ Deteniendo', processing: '⚙️ Procesando', completed: '✅ Completada' };
+          document.getElementById('sessionStatus').textContent = `Estado: ${statusMap[session.status] || session.status}`;
+          document.getElementById('sessionFiles').textContent = `Replays detectados: ${session.detectedFiles?.length || 0}`;
+          document.getElementById('sessionLog').textContent = (session.logs || []).join('\n');
+          if (session.status === 'completed') {
+            clearInterval(sessionPollTimer);
+          }
+        } catch (e) {
+          // ignorar errores de polling
+        }
+      }, 3000);
+    }
+
+    function setRenderDisabled(disabled) {
+      document.getElementById('btnRender').disabled = disabled;
+      const stockBtns = document.querySelectorAll('[data-render-stock-btn]');
+      stockBtns.forEach((b) => b.disabled = disabled);
+    }
+
+    async function renderSelected() {
+      if (currentJobId) {
+        alert('Ya hay un render en curso: ' + currentJobId);
+        return;
+      }
+      currentJobId = 'pending';
+      setRenderDisabled(true);
+
+      const gamesWithStocks = [];
+      const gamesAll = [];
+
+      for (const filePath of selectedGames) {
+        const g = allGames.find((x) => x.filePath === filePath);
+        if (!g) continue;
+        const stocks = flattenSelectedStocks(filePath);
+        if (stocks.length > 0) {
+          gamesWithStocks.push({ ...g, selectedStocks: stocks });
+        } else {
+          gamesAll.push(g);
+        }
+      }
+
+      const options = getOptions();
+      let jobId = null;
+
+      try {
+        if (gamesWithStocks.length > 0) {
+          const res = await fetch('/api/process-stocks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ games: gamesWithStocks, options }),
+          });
+          const data = await res.json();
+          if (data.error) throw new Error(data.error);
+          jobId = data.jobId;
+        } else if (gamesAll.length > 0) {
+          const res = await fetch('/api/process', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ games: gamesAll, options }),
+          });
+          const data = await res.json();
+          if (data.error) throw new Error(data.error);
+          jobId = data.jobId;
+        }
+      } catch (err) {
+        currentJobId = null;
+        setRenderDisabled(false);
+        alert('Error iniciando render: ' + err.message);
+        return;
+      }
+
+      if (jobId) {
+        startPolling(jobId);
+      } else {
+        currentJobId = null;
+        setRenderDisabled(false);
+      }
+    }
+
+    async function renderGameStocks(filePath) {
+      if (currentJobId) {
+        alert('Ya hay un render en curso: ' + currentJobId);
+        return;
+      }
+      currentJobId = 'pending';
+      setRenderDisabled(true);
+
+      const g = allGames.find((x) => x.filePath === filePath);
+      const stocks = flattenSelectedStocks(filePath);
+      if (!g || stocks.length === 0) {
+        currentJobId = null;
+        setRenderDisabled(false);
+        return;
+      }
+
+      const options = getOptions();
+      try {
+        const res = await fetch('/api/process-stocks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ games: [{ ...g, selectedStocks: stocks }], options }),
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        startPolling(data.jobId);
+      } catch (err) {
+        currentJobId = null;
+        setRenderDisabled(false);
+        alert('Error iniciando render: ' + err.message);
+      }
+    }
+
+    function startPolling(jobId) {
+      currentJobId = jobId;
+      setRenderDisabled(true);
+      const panel = document.getElementById('jobPanel');
+      panel.style.display = 'block';
+      document.getElementById('jobTitle').textContent = 'Enviando a render...';
+      document.getElementById('jobLog').textContent = '';
+      document.getElementById('jobProgress').style.width = '0%';
+      pollJob(jobId);
+    }
+
+    function formatEta(seconds) {
+      if (seconds === null || seconds === undefined || seconds < 0) return '';
+      if (seconds < 60) return `~${seconds}s restantes`;
+      const m = Math.floor(seconds / 60);
+      const s = seconds % 60;
+      return `~${m}m ${s.toString().padStart(2, '0')}s restantes`;
+    }
+
+    async function pollJob(jobId) {
+      for (let i = 0; i < 3600; i++) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const res = await fetch(`/api/jobs/${jobId}`);
+        if (!res.ok) continue;
+        const job = await res.json();
+        const bar = document.getElementById('jobProgress');
+
+        let pct = 0;
+        let title = `${job.status.toUpperCase()} · ${job.done}/${job.total} juegos`;
+
+        if (job.progress && job.progress.totalStocks > 0) {
+          pct = job.progress.overallProgress || 0;
+          const stockText = `Stock ${job.progress.currentStock}/${job.progress.totalStocks}`;
+          const etaText = formatEta(job.progress.etaSeconds);
+          title = `${job.status.toUpperCase()} · ${stockText} · ${pct.toFixed(1)}% ${etaText}`;
+          bar.className = 'progress-fill';
+          bar.style.width = pct + '%';
+        } else {
+          pct = job.total ? (job.done / job.total * 100) : 0;
+          if (job.done === 0) {
+            bar.className = 'progress-fill indeterminate';
+          } else {
+            bar.className = 'progress-fill';
+            bar.style.width = pct + '%';
+          }
+        }
+
+        document.getElementById('jobTitle').textContent = title;
+        document.getElementById('jobLog').textContent =
+          (job.progress?.log || '') + '\n' +
+          job.outputs.map((o) => o.stdout).join('\n') + '\n' +
+          job.errors.map((e) => 'ERROR: ' + e.error).join('\n');
+        if (job.status === 'completed' || job.status === 'failed') {
+          currentJobId = null;
+          setRenderDisabled(false);
+          selectedGames.clear();
+          selectedStocks = {};
+          await loadProcessed();
+          renderList();
+          break;
+        }
+      }
+    }
+
+    loadGames();
+  </script>
+</body>
+</html>

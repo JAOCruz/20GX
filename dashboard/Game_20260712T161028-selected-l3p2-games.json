@@ -1,0 +1,34 @@
+{
+  "generatedAt": "2026-07-13T14:20:35.620Z",
+  "games": [
+    {
+      "fileName": "Game_20260712T161028.slp",
+      "filePath": "/home/jay/slippi-live/2026-07/Game_20260712T161028.slp",
+      "label": "Game_20260712T161028-selected-l3p2",
+      "outputDir": "Game_20260712T161028-selected-l3p2",
+      "stage": "BATTLEFIELD",
+      "durationSeconds": 132,
+      "attacker": {
+        "charId": 0,
+        "charName": "CAPTAIN_FALCON",
+        "name": "JIMY#831"
+      },
+      "victim": {
+        "charId": 9,
+        "charName": "MARTH",
+        "name": "DOLF#556"
+      },
+      "winner": "DOLF#556",
+      "stockKills": 1,
+      "date": "2026-07-13T14:20:35.620Z",
+      "stocks": [
+        {
+          "index": 0,
+          "path": "/clips-auto/Game_20260712T161028-selected-l3p2/Game_20260712T161028_stock1.mp4",
+          "direction": "main"
+        }
+      ],
+      "combinedPath": "/clips-auto/Game_20260712T161028-selected-l3p2/Game_20260712T161028_selected-stocks.mp4"
+    }
+  ]
+}

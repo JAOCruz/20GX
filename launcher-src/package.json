@@ -1,0 +1,20 @@
+{
+  "name": "slippi-launcher",
+  "productName": "Slippi Launcher",
+  "description": "Launch Slippi Online, browse and watch saved replays",
+  "version": "2.15.0",
+  "main": "./dist/main/main.js",
+  "author": {
+    "name": "Jas Laferriere",
+    "email": "jas.laferriere@gmail.com",
+    "url": "https://github.com/jlaferri"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "kysely": "^0.28.17",
+    "kysely-sqlite-worker": "^1.2.1",
+    "threads": "^1.6.5",
+    "websocket": "^1.0.34"
+  },
+  "license": "GPL-3.0"
+}

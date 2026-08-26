@@ -1,0 +1,43 @@
+# Dependencias y builds
+node_modules/
+**/node_modules/
+**/dist/
+
+# Secretos y tokens
+.env
+client_secret.json
+youtube-token.json
+
+# Logs
+*.log
+
+# Estado mutable del runtime (SQLite, colas, caches, configuración viva)
+jobs.sqlite*
+sets.json
+schedule.json
+approvals.json
+telegram-compile-queue.json
+telegram-clip-index.json
+dashboard-config.json
+sets-stocks-cache.json
+uploads-cache.json
+best-clips.json
+best-clips-2026-07.json
+
+# Media generada y binarios pesados
+compilations/
+tmp-render/
+previews/
+thumbnails/
+yt-clips/
+clips-auto/
+voiceovers/
+discord-recordings/
+melee.iso
+slp-to-video/
+playback-dolphin/
+Sys/
+usr/
+
+# Sistema
+.DS_Store
