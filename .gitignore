@@ -41,3 +41,6 @@ usr/
 
 # Sistema
 .DS_Store
+
+# Cache de juegos escaneados (regenerable)
+dashboard/all-games-cache.json
