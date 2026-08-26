@@ -12,6 +12,7 @@ import {
   Pencil,
   Radar,
   Scissors,
+  Search,
   Smartphone,
   StickyNote,
   Trash2,
@@ -24,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { StockIcon } from "@/components/StockIcon";
 import { ExportThumbnail } from "@/components/ExportThumbnail";
 import { ImportDropzone } from "@/components/ImportDropzone";
+import { SearchSetsModal } from "@/components/SearchSetsModal";
 import { deleteSet, detectSets, getExports, getSets, updateSet } from "@/lib/api";
 import type { ExportRecord, SetSummary } from "@/types";
 
@@ -284,6 +286,7 @@ export function SetsPage() {
   const [detectMsg, setDetectMsg] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  const [showSearch, setShowSearch] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["sets"],
@@ -338,6 +341,14 @@ export function SetsPage() {
           {detectMutation.isError && (
             <Badge variant="destructive">{String(detectMutation.error)}</Badge>
           )}
+          <Button
+            variant="secondary"
+            onClick={() => setShowSearch(true)}
+            title="Buscar juegos por jugador/personaje y crear un set con los resultados"
+          >
+            <Search className="h-4 w-4" />
+            Buscar y crear
+          </Button>
           <Button
             onClick={() => detectMutation.mutate()}
             disabled={detectMutation.isPending}
@@ -428,6 +439,17 @@ export function SetsPage() {
       </Card>
 
       <ImportDropzone />
+
+      {showSearch && (
+        <SearchSetsModal
+          onClose={() => setShowSearch(false)}
+          onCreated={(setId) => {
+            setShowSearch(false);
+            queryClient.invalidateQueries({ queryKey: ["sets"] });
+            navigate(`/sets/${setId}`);
+          }}
+        />
+      )}
     </div>
   );
 }
