@@ -239,6 +239,14 @@ export interface ExportSetBody {
   vertical?: boolean;
   // Segundos extra de contexto antes de cada clip (0-60).
   leadSeconds?: number;
+  // Pista de música (de /api/music) mezclada sobre el export. null = sin música.
+  music?: { file: string; gameVolume?: number } | null;
+}
+
+export interface MusicTrack {
+  name: string;
+  sizeBytes: number;
+  durationSec: number | null;
 }
 
 export type PreviewStatus = "pending" | "rendering" | "done" | "error";
@@ -350,6 +358,7 @@ export interface ScheduleBody {
   targetDurationSec?: number;
   vertical?: boolean;
   leadSeconds?: number;
+  music?: { file: string; gameVolume?: number } | null;
   exportJobId?: string;
   publishAt: string; // ISO
   title?: string;

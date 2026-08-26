@@ -23,6 +23,7 @@ import {
   QueueJob,
   ExportRecord,
   UploadsResponse,
+  MusicTrack,
 } from "@/types";
 
 const API_BASE = "/api";
@@ -259,6 +260,31 @@ export function exportSet(id: string, body: ExportSetBody) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+  });
+}
+
+// ---------- Música para exports ----------
+
+export function getMusic() {
+  return fetchJson<{ tracks: MusicTrack[] }>(`${API_BASE}/music`);
+}
+
+export async function uploadMusic(file: File): Promise<{ track: MusicTrack }> {
+  const res = await fetch(`${API_BASE}/music`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/octet-stream",
+      "x-filename": encodeURIComponent(file.name),
+    },
+    body: file,
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+export function deleteMusic(name: string) {
+  return fetchJson<{ ok: boolean }>(`${API_BASE}/music/${encodeURIComponent(name)}`, {
+    method: "DELETE",
   });
 }
 

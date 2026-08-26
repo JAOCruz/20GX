@@ -66,6 +66,8 @@ function createEntry(data) {
     targetDurationSec: data.targetDurationSec || null,
     vertical: !!data.vertical,
     leadSeconds: Math.max(0, Math.min(60, Number(data.leadSeconds) || 0)),
+    // Pista de music/ para mezclar en el render (null = sin música).
+    music: data.music && data.music.file ? { file: data.music.file, gameVolume: data.music.gameVolume ?? 0.2 } : null,
     title: data.title || '',
     description: data.description || '',
     tags: Array.isArray(data.tags) ? data.tags : [],
@@ -208,6 +210,7 @@ async function tickEntry(queue, entry, now) {
       items,
       vertical: entry.vertical,
       leadSeconds: entry.leadSeconds,
+      music: entry.music || null,
     });
     updateEntry(entry.id, { status: 'rendering', jobId, error: null });
     log(`Entry ${entry.id} (${entry.name}) encolada para render, job ${jobId}`);

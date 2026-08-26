@@ -7,7 +7,7 @@ const cors = require('cors');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawn, exec } = require('child_process');
+const { spawn, exec, spawnSync } = require('child_process');
 const { SlippiGame } = require('@slippi/slippi-js');
 const { scanReplays, loadCachedGames, saveCachedGames, scanReplay } = require('./scan-replays');
 const { detectStocks } = require('./detect-stocks');
@@ -506,6 +506,87 @@ function saveUniqueFile(destDir, filename, buffer) {
   return candidate;
 }
 
+// ---------- Música para exports ----------
+
+const MUSIC_DIR = path.join(__dirname, 'music');
+if (!fs.existsSync(MUSIC_DIR)) fs.mkdirSync(MUSIC_DIR, { recursive: true });
+const MUSIC_EXTS = new Set(['.mp3', '.wav', '.m4a', '.ogg', '.aac', '.flac']);
+
+function musicDurationSec(filePath) {
+  const out = spawnSync('ffprobe', [
+    '-v', 'quiet', '-show_entries', 'format=duration', '-of', 'csv=p=0', filePath,
+  ], { encoding: 'utf-8' });
+  const d = parseFloat((out.stdout || '').trim());
+  return Number.isFinite(d) ? Math.round(d) : null;
+}
+
+// GET /api/music — lista de pistas subidas
+app.get('/api/music', (req, res) => {
+  try {
+    const tracks = fs.readdirSync(MUSIC_DIR)
+      .filter((f) => MUSIC_EXTS.has(path.extname(f).toLowerCase()))
+      .map((f) => {
+        const p = path.join(MUSIC_DIR, f);
+        return { name: f, sizeBytes: fs.statSync(p).size, durationSec: musicDurationSec(p) };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+    res.json({ tracks });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/music — sube una pista (binario crudo, header x-filename).
+app.post('/api/music', express.raw({ type: ['audio/*', 'application/octet-stream'], limit: '200mb' }), (req, res) => {
+  try {
+    let filename = '';
+    try {
+      filename = path.basename(decodeURIComponent(String(req.headers['x-filename'] || '')));
+    } catch {
+      filename = path.basename(String(req.headers['x-filename'] || ''));
+    }
+    if (!filename) return res.status(400).json({ error: 'Falta header x-filename' });
+    if (!MUSIC_EXTS.has(path.extname(filename).toLowerCase())) {
+      return res.status(400).json({ error: `Extensión no soportada (usa ${[...MUSIC_EXTS].join(', ')})` });
+    }
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+      return res.status(400).json({ error: 'Body vacío (se esperaba application/octet-stream)' });
+    }
+    const dest = path.join(MUSIC_DIR, filename);
+    fs.writeFileSync(dest, req.body);
+    console.log(`[music] subida: ${filename} (${(req.body.length / 1024 / 1024).toFixed(1)} MB)`);
+    res.json({ ok: true, track: { name: filename, sizeBytes: req.body.length, durationSec: musicDurationSec(dest) } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/music/:name — borra una pista
+app.delete('/api/music/:name', (req, res) => {
+  try {
+    const p = path.join(MUSIC_DIR, path.basename(req.params.name));
+    if (!p.startsWith(MUSIC_DIR) || !fs.existsSync(p)) {
+      return res.status(404).json({ error: 'Pista no encontrada' });
+    }
+    fs.rmSync(p, { force: true });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Valida el payload music del export/schedule: { file, gameVolume? 0-1 }.
+// Devuelve el objeto limpio, null (sin música) o lanza 400 vía res.
+function parseMusicParam(raw) {
+  if (raw == null) return null;
+  const file = path.basename(String(raw.file || ''));
+  if (!file || !fs.existsSync(path.join(MUSIC_DIR, file))) {
+    throw new Error(`Pista de música no encontrada: ${raw.file}`);
+  }
+  const gv = raw.gameVolume == null ? 0.2 : Number(raw.gameVolume);
+  return { file, gameVolume: Math.max(0, Math.min(1, Number.isFinite(gv) ? gv : 0.2)) };
+}
+
 // POST /api/import — sube .slp o .zip (binario crudo) para importar replays.
 // Solo guarda archivos y devuelve paths; la creación/actualización del set la
 // hace el frontend llamando a POST /api/sets o PUT /api/sets/:id al terminar.
@@ -838,9 +919,16 @@ app.post('/api/sets/:id/export', (req, res) => {
   const set = setsStore.getSet(req.params.id);
   if (!set) return res.status(404).json({ error: 'Set no encontrado' });
 
-  const { type, items: rawItems, targetDurationSec, vertical, leadSeconds } = req.body || {};
+  const { type, items: rawItems, targetDurationSec, vertical, leadSeconds, music: rawMusic } = req.body || {};
   if (type !== 'full-set' && type !== 'reel') {
     return res.status(400).json({ error: 'type debe ser "full-set" o "reel"' });
+  }
+
+  let music;
+  try {
+    music = parseMusicParam(rawMusic);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
   }
 
   let items;
@@ -885,6 +973,7 @@ app.post('/api/sets/:id/export', (req, res) => {
     targetDurationSec: targetDurationSec || null,
     vertical: !!vertical, // guardado para futuro formato shorts; hoy renderiza 4:3
     leadSeconds: Math.max(0, Math.min(60, Number(leadSeconds) || 0)), // contexto extra antes del combo
+    music, // pista de music/ mezclada al final (null = sin música)
   };
   const jobId = jobQueue.add('set-export', payload);
 
@@ -1027,12 +1116,18 @@ function scheduleExistingExport(req, res) {
 // o (con exportJobId) solo la subida de un export ya renderizado.
 app.post('/api/schedule', (req, res) => {
   if (req.body && req.body.exportJobId) return scheduleExistingExport(req, res);
-  const { setId, type, items: rawItems, targetDurationSec, vertical, leadSeconds, publishAt, title, description, tags } = req.body || {};
+  const { setId, type, items: rawItems, targetDurationSec, vertical, leadSeconds, publishAt, title, description, tags, music: rawMusic } = req.body || {};
 
   const set = setsStore.getSet(setId);
   if (!set) return res.status(404).json({ error: 'Set no encontrado' });
   if (type !== 'full-set' && type !== 'reel') {
     return res.status(400).json({ error: 'type debe ser "full-set" o "reel"' });
+  }
+  let music;
+  try {
+    music = parseMusicParam(rawMusic);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
   }
   const publishMs = Date.parse(publishAt);
   if (!publishAt || !Number.isFinite(publishMs)) {
@@ -1097,6 +1192,7 @@ app.post('/api/schedule', (req, res) => {
     targetDurationSec: targetDurationSec || null,
     vertical,
     leadSeconds,
+    music, // pista de music/ mezclada en el render (null = sin música)
     publishAt: new Date(publishMs).toISOString(),
     title: metadata.title,
     description: metadata.description,

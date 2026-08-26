@@ -298,6 +298,61 @@ function cleanupTempDir(tempDir) {
   }
 }
 
+// ---------- Música sobre el export ----------
+
+const MUSIC_DIR = path.join(__dirname, 'music');
+
+// ¿El video tiene stream de audio?
+function hasAudioStream(filePath) {
+  const out = spawnSync('ffprobe', [
+    '-v', 'quiet', '-select_streams', 'a:0',
+    '-show_entries', 'stream=codec_type', '-of', 'csv=p=0', filePath,
+  ], { encoding: 'utf-8' });
+  return out.status === 0 && (out.stdout || '').trim().length > 0;
+}
+
+// Mezcla una pista de music/ sobre el video final. La pista se loopea si es
+// más corta que el video y sale con fade-out de 2.5s al final.
+// gameVolume: 0-1 (0 = solo música; default 0.2 = juego de fondo bajito).
+// Reescribe outputPath in-place (vía archivo temporal).
+async function applyMusic(outputPath, musicFile, queue, jobId, gameVolume = 0.2) {
+  const musicPath = path.join(MUSIC_DIR, path.basename(musicFile));
+  if (!fs.existsSync(musicPath)) {
+    throw new Error(`Pista de música no encontrada: ${musicFile}`);
+  }
+  const gv = Math.max(0, Math.min(1, Number(gameVolume)));
+  if (!Number.isFinite(gv)) throw new Error(`gameVolume inválido: ${gameVolume}`);
+
+  const durSec = ffprobeDurationSec(outputPath);
+  const fadeStart = durSec ? Math.max(0, durSec - 2.5).toFixed(2) : '0';
+  const withGameAudio = hasAudioStream(outputPath) && gv > 0;
+  const filter = withGameAudio
+    ? `[0:a]volume=${gv}[ga];[1:a]volume=1,afade=t=out:st=${fadeStart}:d=2.5[ma];[ga][ma]amix=inputs=2:duration=first[a]`
+    : `[1:a]volume=1,afade=t=out:st=${fadeStart}:d=2.5[a]`;
+
+  const tmpPath = outputPath.replace(/\.mp4$/, '.music-tmp.mp4');
+  log(`música: ${musicFile} (juego ${Math.round(gv * 100)}%) → ${path.basename(outputPath)}`);
+  try {
+    await runFfmpeg([
+      '-y', '-loglevel', 'error',
+      '-i', outputPath,
+      '-stream_loop', '-1', '-i', musicPath,
+      '-filter_complex', filter,
+      '-map', '0:v', '-map', '[a]',
+      '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k',
+      '-movflags', '+faststart',
+      tmpPath,
+    ], queue, jobId);
+  } catch (e) {
+    fs.rmSync(tmpPath, { force: true });
+    throw e;
+  }
+  if (!fs.existsSync(tmpPath) || fs.statSync(tmpPath).size === 0) {
+    throw new Error('ffmpeg música no produjo salida');
+  }
+  fs.renameSync(tmpPath, outputPath);
+}
+
 // Convierte el video a 1080x1920 vertical. Los parts vienen normalizados a
 // 1280x720 con el gameplay 4:3 (642x528) centrado con bandas laterales —
 // para vertical recortamos esas bandas primero (crop al aspecto del contenido)
@@ -507,6 +562,14 @@ async function runSetExportJob(job, queue) {
     if (vertical) {
       updateProgress(queue, job.id, { phase: 'vertical', current: total, total, etaSec: null });
       await padToVertical(outputPath, queue, job.id);
+    }
+
+    // Música sobre el video final (post concat + vertical). -c:v copy: solo
+    // se re-encodea el audio. gameVolume 0 = solo la pista de música.
+    const music = job.payload.music;
+    if (music && music.file) {
+      updateProgress(queue, job.id, { phase: 'music', current: total, total, etaSec: null });
+      await applyMusic(outputPath, music.file, queue, job.id, music.gameVolume);
     }
 
     const sizeBytes = fs.statSync(outputPath).size;

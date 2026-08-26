@@ -33,6 +33,7 @@ import { StockIcon } from "@/components/StockIcon";
 import { JobPanel } from "@/components/JobPanel";
 import { TopCombosPanel } from "@/components/TopCombosPanel";
 import { ScheduleModal } from "@/components/ScheduleModal";
+import { MusicPicker, type MusicSelection } from "@/components/MusicPicker";
 import { SpecsGrid } from "@/components/SpecsGrid";
 import { ImportDropzone } from "@/components/ImportDropzone";
 import { AddGamesModal } from "@/components/AddGamesModal";
@@ -821,6 +822,25 @@ export function SetDetailPage() {
 
   // Exportación.
   const [vertical, setVertical] = useState(false);
+  // Música del export (persistida por set en localStorage: `music:<setId>`).
+  const [music, setMusic] = useState<MusicSelection | null>(() => {
+    if (!id) return null;
+    try {
+      const raw = localStorage.getItem(`music:${id}`);
+      return raw ? (JSON.parse(raw) as MusicSelection) : null;
+    } catch {
+      return null;
+    }
+  });
+  useEffect(() => {
+    if (!id) return;
+    try {
+      if (music) localStorage.setItem(`music:${id}`, JSON.stringify(music));
+      else localStorage.removeItem(`music:${id}`);
+    } catch {
+      // localStorage no disponible: no romper la página.
+    }
+  }, [music, id]);
   const [leadSeconds, setLeadSeconds] = useState(0);
   const [queuedJobId, setQueuedJobId] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -848,8 +868,8 @@ export function SetDetailPage() {
     setExportError(null);
     setQueuedJobId(null);
     // Un leadSeconds explícito en el body (ej: export de previews ya ajustados)
-    // pisa al input global "Contexto extra".
-    exportMutation.mutate({ leadSeconds, ...body });
+    // pisa al input global "Contexto extra". Igual con music.
+    exportMutation.mutate({ leadSeconds, music, ...body });
   };
 
   // Previews listos (done) en el orden actual de la playlist: sus frames ya
@@ -891,6 +911,7 @@ export function SetDetailPage() {
       })),
       leadSeconds: 0,
       ...(vertical ? { vertical: true } : {}),
+      ...(music ? { music } : {}),
       publishAt: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
       // Si quedan vacíos, el backend genera la metadata automáticamente.
       ...(title ? { title } : {}),
@@ -1368,6 +1389,7 @@ export function SetDetailPage() {
                         })),
                         leadSeconds: 0,
                         ...(vertical ? { vertical: true } : {}),
+                        ...(music ? { music } : {}),
                       })
                     }
                     title="Programar la publicación en YouTube de la playlist ajustada"
@@ -1917,6 +1939,7 @@ export function SetDetailPage() {
                   items: orderedGames.map((g) => ({ gamePath: g.path })),
                   leadSeconds,
                   ...(vertical ? { vertical: true } : {}),
+                  ...(music ? { music } : {}),
                 })
               }
               title="Programar la publicación del set completo en YouTube"
@@ -1949,6 +1972,7 @@ export function SetDetailPage() {
                       })),
                       leadSeconds,
                       ...(vertical ? { vertical: true } : {}),
+                      ...(music ? { music } : {}),
                     })
                   }
                   title="Programar la publicación del reel en YouTube"
@@ -1983,6 +2007,7 @@ export function SetDetailPage() {
               <Smartphone className="h-3.5 w-3.5" />
               Vertical (Shorts)
             </Label>
+            <MusicPicker value={music} onChange={setMusic} />
             <Label
               className="flex items-center gap-1.5 text-xs text-muted-foreground"
               title="Segundos extra de contexto antes de cada clip del export"
