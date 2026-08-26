@@ -5,6 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { StockIcon } from "@/components/StockIcon";
 import { CHAR_NAMES } from "@/lib/stockIcons";
@@ -36,12 +43,18 @@ interface TopCombosPanelProps {
 // Cada item pide un preview con la ventana exacta (comboStartFrame - 4s de
 // contexto → kill + 2s) calculada en el backend.
 export function TopCombosPanel({ scope, setId, onPlay }: TopCombosPanelProps) {
+  // Pedimos el máximo que sirve el backend (50) para que el filtro de
+  // jugador/personaje NO quede limitado al top 10 global: primero se filtra,
+  // después se muestra el top N elegido (10/20/30/50).
+  const FETCH_LIMIT = 50;
   const queryClient = useQueryClient();
   const combosQuery = useQuery({
     queryKey:
       scope === "set" ? ["top-combos", "set", setId] : ["top-combos", "global"],
     queryFn: () =>
-      scope === "set" && setId ? getSetTopCombos(setId) : getTopCombos(),
+      scope === "set" && setId
+        ? getSetTopCombos(setId, FETCH_LIMIT)
+        : getTopCombos(FETCH_LIMIT),
   });
 
   // --- Scan global de stocks (solo scope global) ---
@@ -142,6 +155,8 @@ export function TopCombosPanel({ scope, setId, onPlay }: TopCombosPanelProps) {
   const [query, setQuery] = useState("");
   const [selectedChar, setSelectedChar] = useState<number | null>(null);
   const [charListOpen, setCharListOpen] = useState(false);
+  // Cuántos combos mostrar del ranking (después del filtro).
+  const [displayLimit, setDisplayLimit] = useState(10);
 
   // Lista de personajes filtrada por lo que se escribe ("capit" → Captain Falcon).
   const charOptions = useMemo(() => {
@@ -174,6 +189,11 @@ export function TopCombosPanel({ scope, setId, onPlay }: TopCombosPanelProps) {
     });
   }, [items, query, selectedChar]);
 
+  const displayedItems = useMemo(
+    () => filteredItems.slice(0, displayLimit),
+    [filteredItems, displayLimit]
+  );
+
   return (
     <Card className="border-border bg-card">
       <CardHeader className="pb-2">
@@ -182,7 +202,23 @@ export function TopCombosPanel({ scope, setId, onPlay }: TopCombosPanelProps) {
             <Trophy className="h-5 w-5 text-melee-gold" />
             TOP COMBOS
           </CardTitle>
-          {scope === "global" && (
+          <div className="flex items-center gap-1.5">
+            <Select
+              value={String(displayLimit)}
+              onValueChange={(v) => setDisplayLimit(Number(v))}
+            >
+              <SelectTrigger className="h-7 w-[86px] text-xs" title="Cuántos combos mostrar">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[10, 20, 30, 50].map((n) => (
+                  <SelectItem key={n} value={String(n)}>
+                    Top {n}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {scope === "global" && (
             <Button
               variant="secondary"
               size="sm"
@@ -202,6 +238,7 @@ export function TopCombosPanel({ scope, setId, onPlay }: TopCombosPanelProps) {
               Analizar todos
             </Button>
           )}
+          </div>
         </div>
         {scope === "global" && coverage && (
           <p className="text-xs text-muted-foreground">
@@ -309,12 +346,13 @@ export function TopCombosPanel({ scope, setId, onPlay }: TopCombosPanelProps) {
           </p>
         ) : (
           <>
-            {query.trim() && (
+            {(query.trim() || filteredItems.length > displayLimit) && (
               <p className="text-[10px] text-muted-foreground">
-                {filteredItems.length} de {items.length} combos
+                mostrando {displayedItems.length} de {filteredItems.length}
+                {query.trim() ? ` (filtro: ${query.trim()})` : ""}
               </p>
             )}
-            {filteredItems.map((combo, i) => {
+            {displayedItems.map((combo, i) => {
             const key = `${combo.gamePath}:${combo.stockId}`;
             const isPlaying = playingKey === key;
             return (
