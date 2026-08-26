@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:jarvis": "DASHBOARD_API_URL=http://100.87.41.106:8081 vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"
