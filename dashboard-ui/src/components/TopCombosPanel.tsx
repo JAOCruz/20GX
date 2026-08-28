@@ -39,6 +39,15 @@ interface TopCombosPanelProps {
   onPlay?: (combo: TopCombo) => void;
 }
 
+// Estado de un preview encolado desde el panel (modo embebido).
+interface PreviewEntry {
+  id?: string;
+  status: "pending" | "rendering" | "done" | "error";
+  url?: string;
+  etaSec?: number | null;
+  error?: string;
+}
+
 // Panel "Top Combos": ranking de los combos más largos (global o del set).
 // Cada item pide un preview con la ventana exacta (comboStartFrame - 4s de
 // contexto → kill + 2s) calculada en el backend.
@@ -81,24 +90,27 @@ export function TopCombosPanel({ scope, setId, onPlay }: TopCombosPanelProps) {
   }, [scope, scanRunning, scanRequested, scanStatus, queryClient]);
 
   // --- Reproductor embebido (solo si el padre no provee onPlay) ---
-  const [playingKey, setPlayingKey] = useState<string | null>(null);
-  const [playingUrl, setPlayingUrl] = useState<string | null>(null);
-  const [playingBusy, setPlayingBusy] = useState(false);
-  const [playError, setPlayError] = useState<string | null>(null);
-  const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Multi-preview: cada combo puede encolar su render independientemente.
+  // `previews` lleva el estado de cada uno; `selectedKey` es el que se ve
+  // en el player de abajo. Los renders corren en la cola del server.
+  const [previews, setPreviews] = useState<Record<string, PreviewEntry>>({});
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const pollTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   useEffect(() => {
+    const timers = pollTimers.current;
     return () => {
-      if (pollTimer.current) clearTimeout(pollTimer.current);
+      timers.forEach((t) => clearTimeout(t));
+      timers.clear();
     };
   }, []);
 
-  const stopEmbedded = () => {
-    if (pollTimer.current) clearTimeout(pollTimer.current);
-    pollTimer.current = null;
-    setPlayingKey(null);
-    setPlayingUrl(null);
-    setPlayingBusy(false);
-  };
+  const patchPreview = (key: string, patch: Partial<PreviewEntry>) =>
+    setPreviews((prev) => ({
+      ...prev,
+      [key]: { ...(prev[key] ?? { status: "pending" as const }), ...patch },
+    }));
+
+  const stopEmbedded = () => setSelectedKey(null);
 
   const playCombo = async (combo: TopCombo) => {
     if (onPlay) {
@@ -106,41 +118,42 @@ export function TopCombosPanel({ scope, setId, onPlay }: TopCombosPanelProps) {
       return;
     }
     const key = `${combo.gamePath}:${combo.stockId}`;
-    if (pollTimer.current) clearTimeout(pollTimer.current);
-    setPlayingKey(key);
-    setPlayingUrl(null);
-    setPlayingBusy(true);
-    setPlayError(null);
+    setSelectedKey(key);
+    const existing = previews[key];
+    // Ya listo o en cola: solo lo seleccionamos (el poll sigue corriendo).
+    if (existing && existing.status !== "error") return;
+    patchPreview(key, { status: "pending", error: undefined, url: undefined });
     try {
       const created = await createPreview({
         gamePath: combo.gamePath,
         startFrame: combo.startFrame,
         endFrame: combo.endFrame,
       });
+      patchPreview(key, { id: created.id, etaSec: created.etaSec });
       const poll = async () => {
         try {
           const info = await getPreview(created.id);
           if (info.status === "done" && info.url) {
-            setPlayingUrl(info.url);
-            setPlayingBusy(false);
+            patchPreview(key, { status: "done", url: info.url, etaSec: 0 });
             return;
           }
           if (info.status === "error") {
-            setPlayError(info.error || "Error renderizando preview");
-            setPlayingBusy(false);
+            patchPreview(key, { status: "error", error: info.error || "Error renderizando preview" });
             return;
           }
+          patchPreview(key, {
+            status: info.status === "rendering" ? "rendering" : "pending",
+            etaSec: info.etaSec,
+          });
         } catch (e) {
-          setPlayError(String(e));
-          setPlayingBusy(false);
+          patchPreview(key, { status: "error", error: String(e) });
           return;
         }
-        pollTimer.current = setTimeout(poll, 2000);
+        pollTimers.current.set(key, setTimeout(poll, 2000));
       };
       await poll();
     } catch (e) {
-      setPlayError(String(e));
-      setPlayingBusy(false);
+      patchPreview(key, { status: "error", error: String(e) });
     }
   };
 
@@ -201,6 +214,17 @@ export function TopCombosPanel({ scope, setId, onPlay }: TopCombosPanelProps) {
           <CardTitle className="flex items-center gap-2 text-lg">
             <Trophy className="h-5 w-5 text-melee-gold" />
             TOP COMBOS
+            {Object.values(previews).filter(
+              (p) => p.status === "pending" || p.status === "rendering"
+            ).length > 0 && (
+              <Badge variant="secondary" className="text-[10px]">
+                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                renderizando{" "}
+                {Object.values(previews).filter(
+                  (p) => p.status === "pending" || p.status === "rendering"
+                ).length}
+              </Badge>
+            )}
           </CardTitle>
           <div className="flex items-center gap-1.5">
             <Select
@@ -354,12 +378,16 @@ export function TopCombosPanel({ scope, setId, onPlay }: TopCombosPanelProps) {
             )}
             {displayedItems.map((combo, i) => {
             const key = `${combo.gamePath}:${combo.stockId}`;
-            const isPlaying = playingKey === key;
+            const pv = previews[key];
+            const pvBusy = pv?.status === "pending" || pv?.status === "rendering";
+            const pvDone = pv?.status === "done";
+            const pvError = pv?.status === "error";
+            const isSelected = selectedKey === key;
             return (
               <div
                 key={key}
                 className={`flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm ${
-                  isPlaying
+                  isSelected
                     ? "border-melee-gold/60 bg-melee-gold/5"
                     : "border-border/50 bg-black/20 hover:border-melee-gold/40"
                 }`}
@@ -395,16 +423,33 @@ export function TopCombosPanel({ scope, setId, onPlay }: TopCombosPanelProps) {
                     <span>score {combo.score.toFixed(1)}</span>
                   </div>
                 </div>
+                {pvBusy && pv?.etaSec != null && (
+                  <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+                    ~{Math.max(1, Math.round(pv.etaSec))}s
+                  </span>
+                )}
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-7 w-7 shrink-0 p-0 text-melee-gold"
-                  title="Ver el combo (renderiza un preview con contexto)"
-                  disabled={isPlaying && playingBusy}
+                  className={`h-7 w-7 shrink-0 p-0 ${
+                    pvError ? "text-destructive" : pvDone ? "text-green-400" : "text-melee-gold"
+                  }`}
+                  title={
+                    pvError
+                      ? `Error: ${pv.error || "desconocido"} — click para reintentar`
+                      : pvBusy
+                        ? `Renderizando... falta ~${Math.max(1, Math.round(pv?.etaSec ?? 0))}s`
+                        : pvDone
+                          ? "Ver el combo (ya renderizado)"
+                          : "Ver el combo (renderiza un preview con contexto)"
+                  }
+                  disabled={pvBusy && isSelected}
                   onClick={() => playCombo(combo)}
                 >
-                  {isPlaying && playingBusy ? (
+                  {pvBusy ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : pvError ? (
+                    <X className="h-3.5 w-3.5" />
                   ) : (
                     <Play className="h-3.5 w-3.5" />
                   )}
@@ -416,7 +461,7 @@ export function TopCombosPanel({ scope, setId, onPlay }: TopCombosPanelProps) {
         )}
 
         {/* Reproductor embebido: solo cuando el padre no maneja el play */}
-        {!onPlay && playingKey && (
+        {!onPlay && selectedKey && (
           <div className="space-y-1 rounded-md border border-border/50 bg-black/30 p-2">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-muted-foreground">
@@ -432,23 +477,33 @@ export function TopCombosPanel({ scope, setId, onPlay }: TopCombosPanelProps) {
                 <X className="h-3.5 w-3.5" />
               </Button>
             </div>
-            {playingUrl ? (
+            {previews[selectedKey]?.status === "done" && previews[selectedKey]?.url ? (
               <video
-                key={playingUrl}
-                src={playingUrl}
+                key={previews[selectedKey]!.url}
+                src={previews[selectedKey]!.url}
                 controls
                 autoPlay
                 playsInline
                 // Previews 4:3 (Melee nativo): ratio intrínseco, sin barras negras.
                 className="mx-auto max-h-[55vh] w-auto max-w-full rounded-md border border-border bg-black"
               />
+            ) : previews[selectedKey]?.status === "error" ? (
+              <Badge variant="destructive">
+                {previews[selectedKey]?.error || "Error renderizando preview"}
+              </Badge>
             ) : (
-              <div className="mx-auto flex aspect-[4/3] max-h-[55vh] w-full max-w-[min(100%,73vh)] items-center justify-center gap-2 rounded-md border border-border bg-black/40 text-xs text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin text-melee-gold" />
-                Renderizando preview...
+              <div className="mx-auto flex aspect-[4/3] max-h-[55vh] w-full max-w-[min(100%,73vh)] flex-col items-center justify-center gap-2 rounded-md border border-border bg-black/40 text-xs text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-melee-gold" />
+                  Renderizando preview...
+                </div>
+                {previews[selectedKey]?.etaSec != null && (
+                  <span className="font-mono text-[10px]">
+                    falta ~{Math.max(1, Math.round(previews[selectedKey]!.etaSec!))}s
+                  </span>
+                )}
               </div>
             )}
-            {playError && <Badge variant="destructive">{playError}</Badge>}
           </div>
         )}
       </CardContent>
