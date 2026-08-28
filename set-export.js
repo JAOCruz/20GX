@@ -424,11 +424,14 @@ function describeSet(set) {
 
 /**
  * Ejecuta un job set-export. Lanza CancelledError si se cancela.
+ * opts.set: data del set pre-cargada (worker remoto, donde sets.json no existe).
+ * opts.skipNotify: no enviar Telegram ni crear approval (lo hace el server
+ * central al recibir el complete del worker remoto).
  * @returns {{ outputPath, outputUrl, fileName, sizeBytes, clipCount }}
  */
-async function runSetExportJob(job, queue) {
+async function runSetExportJob(job, queue, opts = {}) {
   const { setId, name, type, items, vertical, leadSeconds } = job.payload;
-  const set = setId ? getSet(setId) : null;
+  const set = opts.set || (setId ? getSet(setId) : null);
   const tempDir = path.join(__dirname, `clips-set-${job.id}`);
   fs.mkdirSync(tempDir, { recursive: true });
   if (!fs.existsSync(COMPILATIONS_DIR)) fs.mkdirSync(COMPILATIONS_DIR, { recursive: true });
@@ -583,7 +586,9 @@ async function runSetExportJob(job, queue) {
       elapsedSeconds,
     };
 
-    await notifyCompleted(job, set, result).catch((e) => log('Telegram notify error:', e.message));
+    if (!opts.skipNotify) {
+      await notifyCompleted(job, set, result).catch((e) => log('Telegram notify error:', e.message));
+    }
     return result;
   } catch (err) {
     // En error conservamos los parts ya renderizados: el retry del job los
@@ -737,4 +742,4 @@ async function notifyFailed(job, error) {
   );
 }
 
-module.exports = { runSetExportJob, notifyQueued, notifyFailed, CancelledError, COMPILATIONS_DIR };
+module.exports = { runSetExportJob, notifyQueued, notifyFailed, notifyCompleted, CancelledError, COMPILATIONS_DIR };

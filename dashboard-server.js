@@ -14,7 +14,7 @@ const { detectStocks } = require('./detect-stocks');
 const setsStore = require('./sets-store');
 const { detectSets } = require('./detect-sets');
 const { getSetStocks, selectStocksForDuration, estimateStockClipSeconds, CACHE_FILE: STOCKS_CACHE_FILE } = require('./sets-stocks');
-const { notifyQueued: notifySetQueued } = require('./set-export');
+const { notifyQueued: notifySetQueued, notifyCompleted: notifySetCompleted, notifyFailed: notifySetFailed } = require('./set-export');
 const previewRender = require('./preview-render');
 const { loadApprovals } = require('./approvals');
 const thumbnails = require('./thumbnails');
@@ -586,6 +586,220 @@ function parseMusicParam(raw) {
   const gv = raw.gameVolume == null ? 0.2 : Number(raw.gameVolume);
   return { file, gameVolume: Math.max(0, Math.min(1, Number.isFinite(gv) ? gv : 0.2)) };
 }
+
+// ---------- Worker remoto (Mac como render worker) ----------
+// La Mac clama jobs por HTTP, renderiza local con su Dolphin + GPU (Metal) y
+// sube el mp4 terminado. Jarvis queda de fallback: su worker local cede los
+// tipos remotos mientras haya un worker remoto vivo (heartbeat = cada claim).
+
+const WORKER_TOKEN = process.env.WORKER_TOKEN || null;
+const REMOTE_WORKER_TYPES = ['set-export', 'preview'];
+const remoteWorkers = new Map(); // name -> { lastSeen, types }
+
+function isRemoteWorkerActive() {
+  const now = Date.now();
+  for (const w of remoteWorkers.values()) {
+    if (now - w.lastSeen < 90 * 1000) return true;
+  }
+  return false;
+}
+
+function checkWorkerToken(req, res) {
+  if (!WORKER_TOKEN) {
+    res.status(503).json({ error: 'WORKER_TOKEN no configurado en el server' });
+    return false;
+  }
+  if (req.headers['x-worker-token'] !== WORKER_TOKEN) {
+    res.status(401).json({ error: 'Token de worker inválido' });
+    return false;
+  }
+  return true;
+}
+
+// GET /api/worker/status — lo consulta el worker local para ceder el paso.
+app.get('/api/worker/status', (req, res) => {
+  res.json({
+    remoteActive: isRemoteWorkerActive(),
+    workers: [...remoteWorkers.entries()].map(([name, w]) => ({
+      name,
+      lastSeen: new Date(w.lastSeen).toISOString(),
+      types: w.types,
+    })),
+  });
+});
+
+// POST /api/worker/claim {name, types} — heartbeat + claim atómico del job
+// pendiente más viejo de los tipos pedidos. Devuelve {job, setData} (setData:
+// el worker remoto no tiene sets.json).
+app.post('/api/worker/claim', (req, res) => {
+  if (!checkWorkerToken(req, res)) return;
+  const name = String(req.body?.name || 'remote').slice(0, 40);
+  const types = Array.isArray(req.body?.types) && req.body.types.length > 0
+    ? req.body.types.filter((t) => REMOTE_WORKER_TYPES.includes(t))
+    : REMOTE_WORKER_TYPES;
+  remoteWorkers.set(name, { lastSeen: Date.now(), types });
+  // heartbeat puro: el worker está ocupado renderizando pero sigue vivo —
+  // actualiza lastSeen SIN clamar otro job.
+  if (req.body?.heartbeat) return res.json({ job: null });
+  const job = jobQueue.claimNextTypes(types);
+  if (!job) return res.json({ job: null });
+  const setData = job.payload?.setId ? setsStore.getSet(job.payload.setId) : null;
+  console.log(`[worker-api] ${name} clamó ${job.id} (${job.type})`);
+  res.json({ job, setData });
+});
+
+// POST /api/worker/jobs/:id/progress {progress}
+app.post('/api/worker/jobs/:id/progress', (req, res) => {
+  if (!checkWorkerToken(req, res)) return;
+  const progress = { ...(req.body?.progress || {}), _remoteAt: Date.now() };
+  try { jobQueue.updateProgress(req.params.id, progress); } catch { /* job borrado */ }
+  res.json({ ok: true });
+});
+
+// POST /api/worker/jobs/:id/output — sube el mp4 final (streaming crudo).
+// Header: x-filename (encodeURIComponent). Se escribe a .part y se renombra.
+app.post('/api/worker/jobs/:id/output', (req, res) => {
+  if (!checkWorkerToken(req, res)) return;
+  const job = jobQueue.get(req.params.id);
+  if (!job) return res.status(404).json({ error: 'Job no encontrado' });
+  let fileName;
+  try { fileName = path.basename(decodeURIComponent(String(req.headers['x-filename'] || ''))); }
+  catch { fileName = path.basename(String(req.headers['x-filename'] || '')); }
+  if (!fileName || !fileName.endsWith('.mp4')) {
+    return res.status(400).json({ error: 'x-filename debe terminar en .mp4' });
+  }
+  const dir = job.type === 'preview' ? previewRender.PREVIEWS_DIR : COMPILATIONS_DIR;
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const dest = path.join(dir, fileName);
+  const tmp = `${dest}.part-${Date.now()}`;
+  const ws = fs.createWriteStream(tmp);
+  req.pipe(ws);
+  ws.on('error', (err) => {
+    fs.rmSync(tmp, { force: true });
+    res.status(500).json({ error: err.message });
+  });
+  ws.on('finish', () => {
+    const size = fs.statSync(tmp).size;
+    if (size === 0) {
+      fs.rmSync(tmp, { force: true });
+      return res.status(400).json({ error: 'Archivo vacío' });
+    }
+    fs.renameSync(tmp, dest);
+    console.log(`[worker-api] output recibido: ${fileName} (${(size / 1048576).toFixed(1)} MB)`);
+    res.json({ ok: true, path: dest, sizeBytes: size });
+  });
+});
+
+// POST /api/worker/jobs/:id/complete {result} — valida que el output ya se
+// subió, reescribe paths al filesystem de jarvis y dispara la notificación
+// Telegram/approval (el worker remoto corre con skipNotify).
+app.post('/api/worker/jobs/:id/complete', (req, res) => {
+  if (!checkWorkerToken(req, res)) return;
+  const job = jobQueue.get(req.params.id);
+  if (!job) return res.status(404).json({ error: 'Job no encontrado' });
+  if (job.status === 'cancelled') return res.json({ ok: true, ignored: 'cancelled' });
+  const result = req.body?.result || {};
+  try {
+    if (job.type === 'set-export') {
+      const fileName = path.basename(result.fileName || '');
+      const dest = fileName ? path.join(COMPILATIONS_DIR, fileName) : null;
+      if (!dest || !fs.existsSync(dest)) {
+        return res.status(400).json({ error: 'Falta el output (subilo a /output primero)' });
+      }
+      const finalResult = {
+        ...result,
+        outputPath: dest,
+        outputUrl: `/compilations/${fileName}`,
+        sizeBytes: fs.statSync(dest).size,
+      };
+      jobQueue.complete(job.id, { progress: { phase: 'done', ...finalResult } });
+      const set = job.payload.setId ? setsStore.getSet(job.payload.setId) : null;
+      notifySetCompleted(job, set, finalResult)
+        .catch((e) => console.warn('[worker-api] notify completed error:', e.message));
+    } else if (job.type === 'preview') {
+      const pvId = job.payload.id;
+      const dest = previewRender.previewFilePath(pvId);
+      if (!fs.existsSync(dest)) {
+        return res.status(400).json({ error: 'Falta el output (subilo a /output primero)' });
+      }
+      previewRender.registerPreview({
+        id: pvId,
+        gamePath: job.payload.gamePath,
+        startFrame: job.payload.startFrame,
+        endFrame: job.payload.endFrame,
+        fileName: path.basename(dest),
+        status: 'done',
+        createdAt: new Date().toISOString(),
+      });
+      jobQueue.complete(job.id, {
+        progress: { phase: 'done', ...result, outputPath: dest, filePath: dest },
+      });
+    } else {
+      return res.status(400).json({ error: `Tipo ${job.type} no completable por worker remoto` });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/worker/jobs/:id/fail {error, cancelled}
+app.post('/api/worker/jobs/:id/fail', (req, res) => {
+  if (!checkWorkerToken(req, res)) return;
+  const job = jobQueue.get(req.params.id);
+  if (!job) return res.status(404).json({ error: 'Job no encontrado' });
+  if (req.body?.cancelled) return res.json({ ok: true, ignored: 'cancelled' });
+  const error = String(req.body?.error || 'error desconocido').slice(0, 500);
+  jobQueue.fail(job.id, error);
+  if (job.type === 'set-export') notifySetFailed(job, error).catch(() => {});
+  res.json({ ok: true });
+});
+
+// GET /api/worker/file?path=/abs/juego.slp — descarga de replays para el
+// render remoto. Solo .slp absolutos que existan.
+app.get('/api/worker/file', (req, res) => {
+  if (!checkWorkerToken(req, res)) return;
+  const p = String(req.query.path || '');
+  if (!p.endsWith('.slp') || !path.isAbsolute(p)) {
+    return res.status(400).json({ error: 'Solo archivos .slp absolutos' });
+  }
+  if (!fs.existsSync(p)) return res.status(404).json({ error: 'No existe' });
+  res.setHeader('Content-Type', 'application/octet-stream');
+  fs.createReadStream(p).pipe(res);
+});
+
+// GET /api/worker/music/:name — descarga de pistas para mezclar en remoto.
+app.get('/api/worker/music/:name', (req, res) => {
+  if (!checkWorkerToken(req, res)) return;
+  const p = path.join(MUSIC_DIR, path.basename(req.params.name));
+  if (!p.startsWith(MUSIC_DIR) || !fs.existsSync(p)) {
+    return res.status(404).json({ error: 'No existe' });
+  }
+  res.setHeader('Content-Type', 'application/octet-stream');
+  fs.createReadStream(p).pipe(res);
+});
+
+// Reaper: un job clamó un worker remoto y la máquina murió/desconectó →
+// vuelve a pending (queue.fail re-encola mientras queden retries) para que lo
+// tome el fallback local o el propio worker al volver. Corre cada 5 min.
+setInterval(() => {
+  try {
+    if (isRemoteWorkerActive()) return;
+    const running = jobQueue.list({ status: 'running', limit: 100 });
+    const now = Date.now();
+    for (const job of running) {
+      if (!REMOTE_WORKER_TYPES.includes(job.type)) continue;
+      const remoteAt = job.progress?._remoteAt;
+      if (!remoteAt) continue; // job local, no tocar
+      if (now - remoteAt > 10 * 60 * 1000) {
+        console.warn(`[worker-api] reaper: ${job.id} (${job.type}) sin worker remoto vivo → reintento`);
+        jobQueue.fail(job.id, 'worker remoto desconectado');
+      }
+    }
+  } catch (e) {
+    console.warn('[worker-api] reaper error:', e.message);
+  }
+}, 5 * 60 * 1000);
 
 // POST /api/import — sube .slp o .zip (binario crudo) para importar replays.
 // Solo guarda archivos y devuelve paths; la creación/actualización del set la

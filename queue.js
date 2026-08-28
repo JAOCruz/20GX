@@ -87,11 +87,16 @@ class JobQueue extends EventEmitter {
     return stmt.all(...params).map((r) => this._hydrate(r));
   }
 
-  claimNext() {
-    const stmt = this._prepare(
-      "SELECT * FROM jobs WHERE status = 'pending' ORDER BY createdAt ASC LIMIT 1"
-    );
-    const row = stmt.get();
+  claimNext({ excludeTypes } = {}) {
+    let sql = "SELECT * FROM jobs WHERE status = 'pending'";
+    const params = [];
+    if (Array.isArray(excludeTypes) && excludeTypes.length > 0) {
+      sql += ` AND type NOT IN (${excludeTypes.map(() => '?').join(',')})`;
+      params.push(...excludeTypes);
+    }
+    sql += ' ORDER BY createdAt ASC LIMIT 1';
+    const stmt = this._prepare(sql);
+    const row = stmt.get(...params);
     if (!row) return null;
 
     const update = this._prepare(
@@ -101,6 +106,21 @@ class JobQueue extends EventEmitter {
     const result = update.run(startedAt, row.id);
     if (result.changes === 0) return null; // otro worker lo tomó
 
+    return this._hydrate({ ...row, status: 'running', startedAt });
+  }
+
+  // Claim atómico filtrado por tipos: lo usa el worker remoto (Mac) vía API.
+  claimNextTypes(types) {
+    if (!Array.isArray(types) || types.length === 0) return null;
+    const sql = `SELECT * FROM jobs WHERE status = 'pending' AND type IN (${types.map(() => '?').join(',')}) ORDER BY createdAt ASC LIMIT 1`;
+    const row = this._prepare(sql).get(...types);
+    if (!row) return null;
+    const update = this._prepare(
+      "UPDATE jobs SET status = 'running', startedAt = ? WHERE id = ? AND status = 'pending'"
+    );
+    const startedAt = new Date().toISOString();
+    const result = update.run(startedAt, row.id);
+    if (result.changes === 0) return null;
     return this._hydrate({ ...row, status: 'running', startedAt });
   }
 

@@ -7,7 +7,8 @@
     "process": "node process-replay.js",
     "dashboard-mac": "node dashboard-mac-server.js",
     "dashboard": "node dashboard-server.js",
-    "worker": "node worker-server.js"
+    "worker": "node worker-server.js",
+    "mac-worker": "node mac-worker.js"
   },
   "dependencies": {
     "@discordjs/opus": "^0.10.0",

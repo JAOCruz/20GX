@@ -31,15 +31,32 @@ try {
   }
 } catch (_) { /* ignore */ }
 
-// Ajusta estas rutas a tu instalacion en el servidor (Jarvis)
+// Rutas por plataforma: en macOS no hay xvfb — Dolphin corre nativo con
+// display real (Slippi Dolphin.app del Launcher). Los defaults se pueden
+// pisar con SLIPPI_DOLPHIN_PATH / SSBM_ISO_PATH.
+const IS_MAC = process.platform === 'darwin';
+const MAC_DOLPHIN_BIN =
+  '/Users/jay/Library/Application Support/Slippi Launcher/playback/Slippi Dolphin.app/Contents/MacOS/Slippi Dolphin';
+const MAC_ISO_CANDIDATES = [
+  '/Users/jay/Documents/Games/Melee/Super Smash Bros. Melee (USA) (En,Ja) (Rev 2).iso',
+  '/Users/jay/Melee/Super Smash Bros. Melee (USA) (En,Ja) (Rev 2).iso',
+];
+
+function defaultIsoPath() {
+  if (!IS_MAC) return '/home/jay/slippi-pipeline/melee.iso';
+  return MAC_ISO_CANDIDATES.find((p) => fs.existsSync(p)) || MAC_ISO_CANDIDATES[0];
+}
+
 const CONFIG = {
   sltVideoBin: process.env.SLP_TO_VIDEO_BIN || 'slp-to-video', // si esta en PATH
   dolphinPath:
     process.env.SLIPPI_DOLPHIN_PATH ||
-    '/home/jay/slippi-pipeline/playback-dolphin/Slippi_Playback-x86_64.AppImage',
+    (IS_MAC
+      ? MAC_DOLPHIN_BIN
+      : '/home/jay/slippi-pipeline/playback-dolphin/Slippi_Playback-x86_64.AppImage'),
   isoPath:
     process.env.SSBM_ISO_PATH ||
-    '/home/jay/slippi-pipeline/melee.iso', // ruta al ISO NTSC 1.02
+    defaultIsoPath(), // ruta al ISO NTSC 1.02
   ffmpegPath: process.env.FFMPEG_PATH, // opcional si no esta en PATH
   outputDir: process.env.CLIPS_OUTPUT_DIR || path.join(__dirname, 'clips'),
 };
@@ -52,9 +69,10 @@ function ensureOutputDir() {
 
 /**
  * Detecta si estamos en un entorno headless que necesite xvfb-run.
+ * macOS nunca lo necesita (tiene display y GPU reales).
  */
 function needsXvfb() {
-  return !process.env.DISPLAY;
+  return !IS_MAC && !process.env.DISPLAY;
 }
 
 /**

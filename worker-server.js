@@ -215,11 +215,38 @@ function updateProgressFromText(progress, text, stockOffset, totalStocks) {
   }
 }
 
+// Si hay un worker remoto vivo (Mac), el worker local cede los tipos que el
+// remoto maneja (set-export, preview) y solo toma jobs locales (compute-stocks,
+// render-stock). Se consulta /api/worker/status con cache de 15s para no
+// pegarle al API en cada tick de 2s.
+const REMOTE_TYPES = ['set-export', 'preview'];
+let remoteStatusCache = { at: 0, active: false };
+
+async function isRemoteWorkerActive() {
+  const now = Date.now();
+  if (now - remoteStatusCache.at < 15_000) return remoteStatusCache.active;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    const res = await fetch(`http://localhost:${process.env.DASHBOARD_PORT || 8081}/api/worker/status`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    const data = await res.json();
+    remoteStatusCache = { at: now, active: !!data.remoteActive };
+  } catch {
+    // API caída o lenta: asumir sin remoto (comportamiento normal).
+    remoteStatusCache = { at: now, active: false };
+  }
+  return remoteStatusCache.active;
+}
+
 async function processNext() {
   if (shouldStop || running >= CONCURRENT_JOBS) return;
   let job;
   try {
-    job = queue.claimNext();
+    const excludeTypes = (await isRemoteWorkerActive()) ? REMOTE_TYPES : undefined;
+    job = queue.claimNext({ excludeTypes });
   } catch (err) {
     // Lock transitorio de SQLite (u otro error de cola): NO tumbar el worker,
     // el próximo tick lo reintenta.
