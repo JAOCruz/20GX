@@ -18,6 +18,9 @@ import {
   ExportSetBody,
   PreviewCreated,
   TopCombosResponse,
+  ComboRankingConfig,
+  ComboRule,
+  MoveInfo,
   TopCombosScanStatus,
   PreviewInfo,
   QueueJob,
@@ -300,14 +303,32 @@ export function getPreview(id: string) {
   return fetchJson<PreviewInfo>(`${API_BASE}/previews/${encodeURIComponent(id)}`);
 }
 
-export function getTopCombos(limit = 10, minHits = 3) {
-  return fetchJson<TopCombosResponse>(`${API_BASE}/top-combos?limit=${limit}&minHits=${minHits}`);
+export function getTopCombos(limit = 10, minHits = 3, custom = false) {
+  return fetchJson<TopCombosResponse>(
+    `${API_BASE}/top-combos?limit=${limit}&minHits=${minHits}${custom ? "&custom=1" : ""}`
+  );
 }
 
-export function getSetTopCombos(id: string, limit = 10, minHits = 3) {
+export function getSetTopCombos(id: string, limit = 10, minHits = 3, custom = false) {
   return fetchJson<TopCombosResponse>(
-    `${API_BASE}/sets/${encodeURIComponent(id)}/top-combos?limit=${limit}&minHits=${minHits}`
+    `${API_BASE}/sets/${encodeURIComponent(id)}/top-combos?limit=${limit}&minHits=${minHits}${custom ? "&custom=1" : ""}`
   );
+}
+
+export function getMoves() {
+  return fetchJson<{ moves: MoveInfo[] }>(`${API_BASE}/moves`);
+}
+
+export function getComboRanking() {
+  return fetchJson<ComboRankingConfig>(`${API_BASE}/combo-ranking`);
+}
+
+export function saveComboRanking(rules: ComboRule[]) {
+  return fetchJson<{ ok: boolean; rules: ComboRule[] }>(`${API_BASE}/combo-ranking`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ rules }),
+  });
 }
 
 export function startTopCombosScan() {

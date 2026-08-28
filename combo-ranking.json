@@ -1,0 +1,13 @@
+{
+  "rules": [
+    {
+      "type": "containsMove",
+      "moveId": 18,
+      "characterId": 0
+    },
+    {
+      "type": "minHits",
+      "value": 10
+    }
+  ]
+}

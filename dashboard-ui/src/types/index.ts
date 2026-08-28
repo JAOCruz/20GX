@@ -284,12 +284,43 @@ export interface TopCombo {
   timeSeconds: number;
   comboLength: number;
   killMove: string | null;
+  killMoveId: number | null;
+  // Secuencia de golpes del combo (moveIds genéricos, sin pummels).
+  // null en caches viejos — las reglas contains/starts no aplican ahí.
+  comboMoves: number[] | null;
+  movesKnown: boolean;
   killPercent: number | null;
   score: number;
   player: TopComboPlayer | null; // killer
   opponent: TopComboPlayer | null; // victim
   startFrame: number;
   endFrame: number;
+}
+
+// Regla de ranking personalizado de combos (GET/PUT /api/combo-ranking).
+// El orden del array ES la prioridad (la primera regla manda).
+export type ComboRuleType =
+  | "containsMove"
+  | "startsWithMove"
+  | "endsWithMove"
+  | "minHits"
+  | "maxKillPercent";
+
+export interface ComboRule {
+  type: ComboRuleType;
+  moveId?: number; // containsMove/startsWithMove/endsWithMove
+  value?: number; // minHits / maxKillPercent
+  characterId?: number | null; // scope opcional por personaje (ej: Falcon Punch = Neutral B + Falcon)
+}
+
+export interface ComboRankingConfig {
+  rules: ComboRule[];
+}
+
+export interface MoveInfo {
+  id: number;
+  name: string;
+  shortName: string;
 }
 
 export interface TopCombosResponse {

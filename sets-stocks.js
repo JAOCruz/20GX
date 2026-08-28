@@ -80,6 +80,8 @@ function computeGameStocks(slpPath) {
         victimIndex: victim.playerIndex,
         killPercent: kill.killPercent ?? null,
         killMove: kill.killMove || null,
+        killMoveId: kill.killMoveId ?? null,
+        comboMoves: kill.comboMoves || null,
         comboLength: kill.comboLength || 0,
         comboStartFrame: kill.comboStartFrame ?? null,
       });
@@ -118,7 +120,8 @@ function computeGameStocks(slpPath) {
 // v5: conversions en vez de combos (punish completo + kills que combos pierde).
 // v6: comboLength sin pummels (moveId 52); el grab y los throws sí cuentan.
 // v7: winnerIndex por juego (placements con regla de timeout).
-const CACHE_VERSION = 7;
+// v8: killMoveId + comboMoves por stock (ranking personalizado por golpes).
+const CACHE_VERSION = 8;
 function getGameStocks(slpPath) {
   let mtimeMs = 0;
   try {

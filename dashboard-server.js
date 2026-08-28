@@ -8,7 +8,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn, exec, spawnSync } = require('child_process');
-const { SlippiGame } = require('@slippi/slippi-js');
+const { SlippiGame, moves: slippiMoves } = require('@slippi/slippi-js');
 const { scanReplays, loadCachedGames, saveCachedGames, scanReplay } = require('./scan-replays');
 const { detectStocks } = require('./detect-stocks');
 const setsStore = require('./sets-store');
@@ -33,6 +33,7 @@ const { JobQueue } = require('./queue');
 const scheduler = require('./scheduler');
 const ytChannel = require('./youtube-channel');
 const { generateMetadata } = require('./youtube-metadata');
+const comboRanking = require('./combo-ranking');
 
 const jobQueue = new JobQueue();
 
@@ -1033,6 +1034,10 @@ function topComboItems(gamesStocks, minHits) {
         timeSeconds: s.timeSeconds,
         comboLength: s.comboLength,
         killMove: s.killMove ?? null,
+        killMoveId: s.killMoveId ?? null,
+        comboMoves: s.comboMoves ?? null,
+        // false = cache viejo sin secuencia de golpes (contains/starts no aplican)
+        movesKnown: Array.isArray(s.comboMoves),
         killPercent: s.killPercent ?? null,
         score: s.score,
         player: killer ? { connectCode: killer.connectCode, characterId: killer.characterId } : null,
@@ -1050,12 +1055,47 @@ function topCombosParams(req) {
   return {
     limit: Math.min(50, Math.max(1, Number(req.query.limit) || 10)),
     minHits: Math.max(1, Number(req.query.minHits) || 3),
+    custom: req.query.custom === '1' || req.query.custom === 'true',
   };
 }
 
+// Aplica el ranking personalizado (reglas guardadas) si custom=1 y hay reglas.
+function maybeCustomRank(items, custom) {
+  if (!custom) return items;
+  const { rules } = comboRanking.loadRules();
+  if (rules.length === 0) return items;
+  return comboRanking.applyCustomRanking(items, rules);
+}
+
+// GET /api/moves — catálogo de golpes de slippi-js para el builder de reglas.
+// Los moveIds son genéricos (Neutral B = 18 para todos los personajes).
+app.get('/api/moves', (req, res) => {
+  const list = [];
+  for (let id = 1; id <= 90; id++) {
+    const name = slippiMoves.getMoveName(id);
+    if (!name || name === 'Unknown Move') continue;
+    list.push({ id, name, shortName: slippiMoves.getMoveShortName(id) });
+  }
+  res.json({ moves: list });
+});
+
+// GET/PUT /api/combo-ranking — reglas de ranking personalizado (orden=prioridad)
+app.get('/api/combo-ranking', (req, res) => {
+  res.json(comboRanking.loadRules());
+});
+
+app.put('/api/combo-ranking', (req, res) => {
+  try {
+    const rules = comboRanking.saveRules(req.body?.rules);
+    res.json({ ok: true, rules });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // GET /api/top-combos — ranking global sobre el cache de stocks en disco
 app.get('/api/top-combos', (req, res) => {
-  const { limit, minHits } = topCombosParams(req);
+  const { limit, minHits, custom } = topCombosParams(req);
   try {
     let raw = {};
     if (fs.existsSync(STOCKS_CACHE_FILE)) {
@@ -1064,7 +1104,7 @@ app.get('/api/top-combos', (req, res) => {
     const gamesStocks = Object.values(raw).filter((e) => e && e.data).map((e) => e.data);
     const gamesCache = loadCachedGames() || { games: [] };
     const dateByPath = new Map(gamesCache.games.map((g) => [g.filePath, g.date || g.startAt || null]));
-    const items = topComboItems(gamesStocks, minHits).slice(0, limit).map((it) => ({
+    const items = maybeCustomRank(topComboItems(gamesStocks, minHits), custom).slice(0, limit).map((it) => ({
       ...it,
       gameDate: dateByPath.get(it.gamePath) || gameDateFromName(it.gamePath),
     }));
@@ -1078,12 +1118,12 @@ app.get('/api/top-combos', (req, res) => {
 app.get('/api/sets/:id/top-combos', (req, res) => {
   const set = setsStore.getSet(req.params.id);
   if (!set) return res.status(404).json({ error: 'Set no encontrado' });
-  const { limit, minHits } = topCombosParams(req);
+  const { limit, minHits, custom } = topCombosParams(req);
   try {
     const { games, errors } = getSetStocks(set);
     // gameIndex: posición del juego dentro del set (0-based) para mostrar G1, G2...
     const gameIndexByPath = new Map((set.gamePaths || []).map((p, i) => [p, i]));
-    const items = topComboItems(games, minHits).slice(0, limit).map((it) => ({
+    const items = maybeCustomRank(topComboItems(games, minHits), custom).slice(0, limit).map((it) => ({
       ...it,
       gameDate: gameDateFromName(it.gamePath),
       gameIndex: gameIndexByPath.has(it.gamePath) ? gameIndexByPath.get(it.gamePath) : null,

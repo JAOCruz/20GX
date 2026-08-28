@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Play, Radar, Search, Trophy, X } from "lucide-react";
+import { Loader2, Play, Radar, Search, SlidersHorizontal, Trophy, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,8 @@ import {
   startTopCombosScan,
 } from "@/lib/api";
 import type { TopCombo } from "@/types";
+import { ComboRankingEditor } from "@/components/ComboRankingEditor";
+import { getComboRanking } from "@/lib/api";
 
 function formatTime(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -57,13 +59,22 @@ export function TopCombosPanel({ scope, setId, onPlay }: TopCombosPanelProps) {
   // después se muestra el top N elegido (10/20/30/50).
   const FETCH_LIMIT = 50;
   const queryClient = useQueryClient();
+
+  // Ranking personalizado por reglas (Falcon Punch primero, etc).
+  const [customOn, setCustomOn] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const rankingQuery = useQuery({ queryKey: ["combo-ranking"], queryFn: getComboRanking });
+  const rulesCount = rankingQuery.data?.rules.length ?? 0;
+
   const combosQuery = useQuery({
     queryKey:
-      scope === "set" ? ["top-combos", "set", setId] : ["top-combos", "global"],
+      scope === "set"
+        ? ["top-combos", "set", setId, customOn]
+        : ["top-combos", "global", customOn],
     queryFn: () =>
       scope === "set" && setId
-        ? getSetTopCombos(setId, FETCH_LIMIT)
-        : getTopCombos(FETCH_LIMIT),
+        ? getSetTopCombos(setId, FETCH_LIMIT, 3, customOn)
+        : getTopCombos(FETCH_LIMIT, 3, customOn),
   });
 
   // --- Scan global de stocks (solo scope global) ---
@@ -227,6 +238,41 @@ export function TopCombosPanel({ scope, setId, onPlay }: TopCombosPanelProps) {
             )}
           </CardTitle>
           <div className="flex items-center gap-1.5">
+            <Button
+              variant={customOn ? "default" : "secondary"}
+              size="sm"
+              className="h-7 px-2 text-xs"
+              title={
+                rulesCount === 0
+                  ? "Definí reglas de ranking personalizado (ej: Falcon Punch primero)"
+                  : customOn
+                    ? "Ranking personalizado activo — click para volver al ranking por golpes"
+                    : `Activar ranking personalizado (${rulesCount} reglas)`
+              }
+              onClick={() => {
+                if (rulesCount === 0) {
+                  setRulesOpen(true);
+                  return;
+                }
+                setCustomOn((v) => !v);
+              }}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setRulesOpen((v) => !v);
+              }}
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              {customOn ? "Custom ON" : "Custom"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-1.5 text-[10px] text-muted-foreground"
+              title="Editar reglas de ranking"
+              onClick={() => setRulesOpen((v) => !v)}
+            >
+              reglas{rulesCount > 0 ? ` (${rulesCount})` : ""}
+            </Button>
             <Select
               value={String(displayLimit)}
               onValueChange={(v) => setDisplayLimit(Number(v))}
@@ -284,6 +330,18 @@ export function TopCombosPanel({ scope, setId, onPlay }: TopCombosPanelProps) {
               {scanProgress.failed ? ` · ${scanProgress.failed} con error` : ""}
             </p>
           </div>
+        )}
+        {rulesOpen && (
+          <div className="pt-1">
+            <ComboRankingEditor onSaved={() => setCustomOn(true)} />
+          </div>
+        )}
+        {customOn && rulesCount > 0 && (
+          <p className="pt-1 text-[10px] text-melee-gold">
+            Ranking personalizado activo ({rulesCount} regla{rulesCount !== 1 ? "s" : ""}). Los
+            combos sin data de golpes (cache viejo) solo matchean reglas de hits/% — corré
+            "Analizar todos" para actualizarlos.
+          </p>
         )}
         {items.length > 0 && (
           <div className="relative pt-1">

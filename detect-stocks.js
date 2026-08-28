@@ -50,10 +50,14 @@ function findKills(game, combos, killerIndex, victimIndex) {
         const nonPummel = combo.moves.filter((m) => m.moveId !== 52);
         const lastMove = nonPummel[nonPummel.length - 1] || combo.moves[combo.moves.length - 1];
         event.killMove = moves.getMoveName(lastMove.moveId);
+        event.killMoveId = lastMove.moveId;
+        // Secuencia completa de golpes del combo que mató (sin pummels):
+        // la base del ranking personalizado por movimientos.
+        event.comboMoves = nonPummel.map((m) => m.moveId);
         event.killPercent = Math.round(combo.endPercent);
         // Los pummels (moveId 52) NO cuentan como golpes del combo;
         // el grab y los throws (53-56) sí.
-        event.comboLength = combo.moves.filter((m) => m.moveId !== 52).length;
+        event.comboLength = nonPummel.length;
         // Frame donde empezó el combo que mató: permite que el clip arranque
         // con el neutral antes del punish, no 7s antes de la muerte.
         event.comboStartFrame = combo.startFrame ?? null;
