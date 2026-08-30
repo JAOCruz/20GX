@@ -26,6 +26,17 @@ const { buildApprovalCaption } = require('./youtube-metadata');
 const thumbnails = require('./thumbnails');
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+// Chats autorizados a usar el bot (lista blanca). Sin esto, cualquiera que
+// encuentre el bot puede mandarle comandos. TELEGRAM_CHAT_ID del .env.
+const ALLOWED_CHAT_IDS = (process.env.TELEGRAM_CHAT_ID || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+function isAllowedChat(chatId) {
+  if (chatId == null) return false;
+  if (ALLOWED_CHAT_IDS.length === 0) return true; // sin config no bloqueamos
+  return ALLOWED_CHAT_IDS.includes(String(chatId));
+}
 const INDEX_FILE = process.env.TELEGRAM_CLIP_INDEX || path.join(__dirname, 'telegram-clip-index.json');
 const QUEUE_FILE = process.env.TELEGRAM_COMPILE_QUEUE || path.join(__dirname, 'telegram-compile-queue.json');
 const OUTPUT_DIR = process.env.COMPILE_OUTPUT_DIR || path.join(__dirname, 'compilations');
@@ -1070,6 +1081,10 @@ async function handleApprovalDiscard(token, callbackQuery, approvalId) {
 async function processUpdate(update, token) {
   if (update.callback_query) {
     const cb = update.callback_query;
+    if (!isAllowedChat(cb.message?.chat?.id)) {
+      console.warn('[bot] callback de chat no autorizado:', cb.message?.chat?.id, cb.from?.username || '');
+      return;
+    }
     if (cb.data && (cb.data.startsWith('add_compile:') || cb.data.startsWith('toggle_compile:') || cb.data.startsWith('remove_compile:'))) {
       await handleToggleCompile(token, cb);
     } else if (cb.data && cb.data.startsWith('yt_short:')) {
@@ -1096,6 +1111,10 @@ async function processUpdate(update, token) {
 
   const msg = update.message;
   if (!msg) return;
+  if (!isAllowedChat(msg.chat?.id)) {
+    console.warn('[bot] mensaje de chat no autorizado:', msg.chat?.id, msg.from?.username || '', JSON.stringify(msg.text || '').slice(0, 80));
+    return;
+  }
 
   // El mismo mensaje llega por el polling de cada bot: procesar una sola vez.
   const msgKey = `${msg.chat.id}:${msg.message_id}`;
