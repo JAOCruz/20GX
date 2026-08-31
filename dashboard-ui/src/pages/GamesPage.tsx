@@ -10,6 +10,7 @@ import { JobPanel } from "@/components/JobPanel";
 import { GameTable } from "@/components/GameTable";
 import { StatsChart } from "@/components/StatsChart";
 import { TopCombosPanel } from "@/components/TopCombosPanel";
+import { AutoShortsPanel } from "@/components/AutoShortsPanel";
 import { getGames, getConfig, getScanStatus, createSet } from "@/lib/api";
 import { useDashboardStore } from "@/hooks/useDashboardStore";
 
@@ -121,8 +122,9 @@ export function GamesPage() {
           </CardContent>
         </Card>
 
-        <div className="w-full shrink-0 lg:w-96">
+        <div className="flex w-full shrink-0 flex-col gap-4 lg:w-96">
           <TopCombosPanel scope="global" />
+          <AutoShortsPanel />
         </div>
       </div>
 

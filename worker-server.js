@@ -12,6 +12,7 @@ const { runPreviewJob } = require('./preview-render');
 const { loadCachedGames } = require('./scan-replays');
 const { getGameStocks } = require('./sets-stocks');
 const scheduler = require('./scheduler');
+const autoShorts = require('./auto-shorts');
 
 const POLL_INTERVAL_MS = Number(process.env.WORKER_POLL_INTERVAL || '2000');
 const SCHEDULER_TICK_MS = Number(process.env.SCHEDULER_TICK_MS || '60000');
@@ -306,8 +307,10 @@ function start() {
   const schedulerTimer = setInterval(() => {
     if (shouldStop) return;
     scheduler.tick(queue).catch((err) => log('Scheduler tick error:', err.message));
+    autoShorts.tick(queue).catch((err) => log('Auto-shorts tick error:', err.message));
   }, SCHEDULER_TICK_MS);
   scheduler.tick(queue).catch((err) => log('Scheduler tick error:', err.message));
+  autoShorts.tick(queue).catch((err) => log('Auto-shorts tick error:', err.message));
 
   process.on('SIGTERM', () => clearInterval(schedulerTimer));
   process.on('SIGINT', () => clearInterval(schedulerTimer));

@@ -450,3 +450,69 @@ export interface UploadsResponse {
   fetchedAt: string;
   videos: UploadedVideo[];
 }
+
+// ---------- Auto-shorts (GET/PUT /api/auto-shorts, POST /api/auto-shorts/generate) ----------
+
+export interface AutoShortsConfig {
+  enabled: boolean;
+  frequencyDays: number;
+  targetDurationSec: number;
+  maxClips: number;
+  minComboLength: number;
+  // null = usa las reglas de combo-ranking.json
+  rules: ComboRule[] | null;
+  playerFilter: { connectCodes: string[]; characterIds: number[] };
+  lastRunAt: string | null;
+}
+
+export type AutoShortStatus =
+  | "pending"
+  | "running"
+  | "rendered"
+  | "approval-pending"
+  | "uploaded"
+  | "discarded"
+  | "cancelled"
+  | "error"
+  | "queued";
+
+export interface AutoShortHistoryEntry {
+  id: string;
+  jobId: string;
+  title: string;
+  name: string;
+  trigger: "cron" | "manual";
+  clips: string[];
+  players: string[];
+  createdAt: string;
+  status: AutoShortStatus;
+  outputUrl?: string | null;
+  youtubeUrl?: string | null;
+  approvalId?: string | null;
+  error?: string | null;
+}
+
+export interface AutoShortCandidate {
+  gamePath: string;
+  stockId: string;
+  stage: string;
+  gameDate: string | null;
+  comboLength: number;
+  killMove: string | null;
+  killPercent: number | null;
+  score: number;
+  rating: number | null;
+  displayName: string | null;
+  eloBonus: number;
+  finalScore: number;
+  player: TopComboPlayer | null;
+  opponent: TopComboPlayer | null;
+}
+
+export interface AutoShortsResponse {
+  config: AutoShortsConfig;
+  history: AutoShortHistoryEntry[];
+  candidates: AutoShortCandidate[];
+  candidateCount: number;
+  activeJobId: string | null;
+}

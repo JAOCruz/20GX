@@ -27,6 +27,8 @@ import {
   ExportRecord,
   UploadsResponse,
   MusicTrack,
+  AutoShortsConfig,
+  AutoShortsResponse,
 } from "@/types";
 
 const API_BASE = "/api";
@@ -438,5 +440,26 @@ export function deleteSchedule(id: string) {
 export function getUploads(refresh = false) {
   return fetchJson<UploadsResponse>(
     `${API_BASE}/uploads${refresh ? "?refresh=1" : ""}`
+  );
+}
+
+// ---------- Auto-shorts ----------
+
+export function getAutoShorts() {
+  return fetchJson<AutoShortsResponse>(`${API_BASE}/auto-shorts`);
+}
+
+export function saveAutoShorts(config: Partial<AutoShortsConfig>) {
+  return fetchJson<{ ok: boolean; config: AutoShortsConfig }>(`${API_BASE}/auto-shorts`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config),
+  });
+}
+
+export function generateAutoShort() {
+  return fetchJson<{ ok: boolean; jobId: string; clipCount: number; title: string }>(
+    `${API_BASE}/auto-shorts/generate`,
+    { method: "POST" }
   );
 }

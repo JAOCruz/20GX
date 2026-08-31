@@ -34,6 +34,7 @@ const scheduler = require('./scheduler');
 const ytChannel = require('./youtube-channel');
 const { generateMetadata } = require('./youtube-metadata');
 const comboRanking = require('./combo-ranking');
+const autoShorts = require('./auto-shorts');
 
 const jobQueue = new JobQueue();
 
@@ -1166,6 +1167,71 @@ app.get('/api/top-combos/scan', (req, res) => {
   const job = active || jobQueue.list({ limit: 50 }).find((j) => j.type === 'compute-stocks');
   if (!job) return res.json({ status: 'idle', progress: null });
   res.json({ status: job.status, jobId: job.id, progress: job.progress || null, error: job.error || null });
+});
+
+// ---------- Auto-shorts (reels automáticos rankeados por reglas + ELO) ----------
+
+// Vista de candidato para el preview del dashboard (sin frames ni moves).
+function autoShortCandidateView(it) {
+  return {
+    gamePath: it.gamePath,
+    stockId: it.stockId,
+    stage: it.stage,
+    gameDate: it.gameDate,
+    comboLength: it.comboLength,
+    killMove: it.killMove,
+    killPercent: it.killPercent,
+    score: it.baseScore ?? it.score,
+    rating: it.rating,
+    displayName: it.displayName,
+    eloBonus: it.eloBonus,
+    finalScore: it.finalScore,
+    player: it.player,
+    opponent: it.opponent,
+  };
+}
+
+// GET /api/auto-shorts — config + history (estado resuelto) + preview de
+// candidatos actuales (top 10, sin generar nada).
+app.get('/api/auto-shorts', async (req, res) => {
+  try {
+    const config = autoShorts.getConfig();
+    const candidates = await autoShorts.collectCandidates(config);
+    const activeJob = autoShorts.findActiveAutoShortJob(jobQueue);
+    res.json({
+      config: { ...config, history: undefined },
+      history: autoShorts.resolveHistory(jobQueue).slice().reverse(),
+      candidates: candidates.slice(0, 10).map(autoShortCandidateView),
+      candidateCount: candidates.length,
+      activeJobId: activeJob?.id || null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/auto-shorts — actualiza config (valida rangos)
+app.put('/api/auto-shorts', (req, res) => {
+  try {
+    const config = autoShorts.updateConfig(req.body || {});
+    console.log('[auto-shorts] Config actualizada:', JSON.stringify({ ...config, history: undefined }));
+    res.json({ ok: true, config: { ...config, history: undefined } });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/auto-shorts/generate — fuerza generación manual
+// (409 si ya hay un auto-short renderizando/en cola, 422 si faltan candidatos)
+app.post('/api/auto-shorts/generate', async (req, res) => {
+  try {
+    const result = await autoShorts.generateAutoShort(jobQueue, 'manual');
+    console.log('[auto-shorts] Generación manual encolada:', result.jobId, result.title);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    const code = err.statusCode || 500;
+    res.status(code).json({ error: err.message });
+  }
 });
 
 // POST /api/sets/:id/export — encola UN job compuesto (full-set o reel)

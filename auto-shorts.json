@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "frequencyDays": 3,
+  "targetDurationSec": 40,
+  "maxClips": 6,
+  "minComboLength": 3,
+  "rules": null,
+  "playerFilter": {
+    "connectCodes": [],
+    "characterIds": []
+  },
+  "lastRunAt": null,
+  "history": []
+}

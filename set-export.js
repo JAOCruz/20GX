@@ -633,13 +633,18 @@ async function registerClipMessage(messageId, outputPath, caption, job, opts, is
 async function notifyCompleted(job, set, result) {
   const opts = { token: TELEGRAM_TOKEN, chatId: TELEGRAM_CHAT };
   const sizeMB = (result.sizeBytes / 1024 / 1024).toFixed(1);
+  const isAutoShort = !!job.payload.autoShort;
   const header = [
-    `✅ Set "${job.payload.name}" (${job.payload.type})`,
+    isAutoShort
+      ? `🤖 Auto-short "${job.payload.name}" (${job.payload.type})`
+      : `✅ Set "${job.payload.name}" (${job.payload.type})`,
     describeSet(set),
     `Clips: ${result.clipCount} | Duración render: ${formatDuration(result.elapsedSeconds)} | ${sizeMB} MB`,
   ].filter(Boolean).join('\n');
 
-  const metadata = generateMetadata({
+  // Auto-shorts traen su metadata ya generada (título "Highlights de la
+  // semana Pt.N", tags por jugador/personaje); el resto la genera aquí.
+  const metadata = job.payload.youtubeMeta || generateMetadata({
     set,
     type: job.payload.type,
     items: job.payload.items || [],
