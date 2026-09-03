@@ -199,13 +199,17 @@ export interface SetStock {
   id: string;
   frame: number;
   timeSeconds: number;
-  killerIndex: number;
+  // null en SDs (muerte sin atribución al oponente).
+  killerIndex: number | null;
   victimIndex: number;
   killPercent: number | null;
   killMove: string | null;
   comboLength: number | null;
   comboStartFrame?: number | null;
   score: number;
+  // SD = self-destruct (sin killer); quit = el juego terminó en LRAS.
+  sd?: boolean;
+  quit?: boolean;
   // Ventana de frames exacta para preview (opcional, la puede dar el backend).
   frames?: { start: number; end: number } | null;
 }

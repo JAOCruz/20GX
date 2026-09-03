@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 const { SlippiGame, Stage } = require('@slippi/slippi-js');
-const { findKills } = require('./detect-stocks');
+const { findAllStockEvents, findQuitEvent } = require('./detect-stocks');
 const { formatStageName, scanReplay } = require('./scan-replays');
 
 const CACHE_FILE = path.join(__dirname, 'sets-stocks-cache.json');
@@ -69,23 +69,28 @@ function computeGameStocks(slpPath) {
   // pierden kills en replays viejos). Mismo shape: playerIndex=víctima.
   const combos = game.getStats()?.conversions || game.getStats()?.combos || [];
   const stocks = [];
-  // Kills en ambas direcciones, combinados y ordenados por frame.
-  for (const [killer, victim] of [[players[0], players[1]], [players[1], players[0]]]) {
-    for (const kill of findKills(game, combos, killer.playerIndex, victim.playerIndex)) {
-      stocks.push({
-        id: `k${kill.frame}`,
-        frame: kill.frame,
-        timeSeconds: kill.timeSeconds,
-        killerIndex: killer.playerIndex,
-        victimIndex: victim.playerIndex,
-        killPercent: kill.killPercent ?? null,
-        killMove: kill.killMove || null,
-        killMoveId: kill.killMoveId ?? null,
-        comboMoves: kill.comboMoves || null,
-        comboLength: kill.comboLength || 0,
-        comboStartFrame: kill.comboStartFrame ?? null,
-      });
-    }
+  // TODAS las caídas de stock de ambos jugadores en una pasada (incluye SDs
+  // con killerIndex null) + evento sintético de quit (LRAS) si el juego
+  // terminó porque alguien se salió: ese momento también es clip-able.
+  const events = findAllStockEvents(game, combos, players[0].playerIndex, players[1].playerIndex);
+  const quitEvent = findQuitEvent(game, combos, players[0].playerIndex, players[1].playerIndex);
+  if (quitEvent) events.push(quitEvent);
+  for (const kill of events) {
+    stocks.push({
+      id: `k${kill.frame}`,
+      frame: kill.frame,
+      timeSeconds: kill.timeSeconds,
+      killerIndex: kill.killerIndex,
+      victimIndex: kill.victimIndex,
+      killPercent: kill.killPercent ?? null,
+      killMove: kill.killMove || null,
+      killMoveId: kill.killMoveId ?? null,
+      comboMoves: kill.comboMoves || null,
+      comboLength: kill.comboLength || 0,
+      comboStartFrame: kill.comboStartFrame ?? null,
+      sd: !!kill.sd,
+      quit: !!kill.quit,
+    });
   }
   stocks.sort((a, b) => a.frame - b.frame);
   for (const s of stocks) s.score = scoreKill(s);
@@ -121,7 +126,9 @@ function computeGameStocks(slpPath) {
 // v6: comboLength sin pummels (moveId 52); el grab y los throws sí cuentan.
 // v7: winnerIndex por juego (placements con regla de timeout).
 // v8: killMoveId + comboMoves por stock (ranking personalizado por golpes).
-const CACHE_VERSION = 8;
+// v9: SDs (killerIndex null, sd:true) y evento de quit LRAS (quit:true) ya no
+//     desaparecen de la lista de stocks.
+const CACHE_VERSION = 9;
 function getGameStocks(slpPath) {
   let mtimeMs = 0;
   try {

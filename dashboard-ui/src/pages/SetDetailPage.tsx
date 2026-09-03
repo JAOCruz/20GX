@@ -153,6 +153,8 @@ function winnerIndexOf(game: SetGame): number | null {
   const lost = new Map(game.players.map((p) => [p.playerIndex, 0]));
   let lastDeath: SetStock | null = null;
   for (const s of game.stocks) {
+    // Los quits (LRAS) no son una muerte real: no cuentan como stock perdido.
+    if (s.quit) continue;
     lost.set(s.victimIndex, (lost.get(s.victimIndex) ?? 0) + 1);
     if (!lastDeath || s.frame >= lastDeath.frame) lastDeath = s;
   }
@@ -440,7 +442,7 @@ export function SetDetailPage() {
       killPercent: stock.killPercent,
       comboLength: stock.comboLength,
       score: stock.score,
-      killerCode: killer?.connectCode ?? `P${stock.killerIndex + 1}`,
+      killerCode: killer?.connectCode ?? (stock.killerIndex != null ? `P${stock.killerIndex + 1}` : "SD"),
       killerCharacterId: killer?.characterId,
       victimCode: victim?.connectCode ?? `P${stock.victimIndex + 1}`,
       victimCharacterId: victim?.characterId,
@@ -2165,19 +2167,46 @@ export function SetDetailPage() {
                             <span className="font-mono text-xs text-muted-foreground">
                               {formatTime(stock.timeSeconds)}
                             </span>
-                            <span className="flex items-center gap-1">
-                              <StockIcon characterId={killer?.characterId} size={16} />
-                              <span className="text-xs font-semibold">
-                                {killer?.connectCode ?? `P${stock.killerIndex + 1}`}
+                            {stock.sd ? (
+                              <span className="flex items-center gap-1">
+                                <Badge
+                                  variant="outline"
+                                  className="border-orange-400/50 text-[10px] text-orange-300"
+                                >
+                                  SD
+                                </Badge>
+                                <StockIcon characterId={victim?.characterId} size={16} />
+                                <span className="text-xs">
+                                  {victim?.connectCode ?? `P${stock.victimIndex + 1}`}
+                                </span>
                               </span>
-                            </span>
-                            <span className="text-muted-foreground">→</span>
-                            <span className="flex items-center gap-1">
-                              <StockIcon characterId={victim?.characterId} size={16} />
-                              <span className="text-xs">
-                                {victim?.connectCode ?? `P${stock.victimIndex + 1}`}
-                              </span>
-                            </span>
+                            ) : (
+                              <>
+                                <span className="flex items-center gap-1">
+                                  <StockIcon characterId={killer?.characterId} size={16} />
+                                  <span className="text-xs font-semibold">
+                                    {killer?.connectCode ??
+                                      (stock.killerIndex != null ? `P${stock.killerIndex + 1}` : "?")}
+                                  </span>
+                                </span>
+                                <span className="text-muted-foreground">→</span>
+                                <span className="flex items-center gap-1">
+                                  <StockIcon characterId={victim?.characterId} size={16} />
+                                  <span className="text-xs">
+                                    {victim?.connectCode ?? `P${stock.victimIndex + 1}`}
+                                  </span>
+                                </span>
+                              </>
+                            )}
+                            {stock.quit && (
+                              <Badge
+                                variant="outline"
+                                className="border-purple-400/50 text-[10px] text-purple-300"
+                                title="El juego terminó porque este jugador se salió (LRAS)"
+                              >
+                                QUIT
+                              </Badge>
+                            )}
                             {stock.killMove && (
                               <span className="text-xs text-melee-gold">
                                 {stock.killMove}
